@@ -1,0 +1,17 @@
+# Project-owned files tracking
+.manifest.json
+
+# Test fixtures and temp directories
+tests/fixtures/
+tests/tmp/
+
+# Node modules
+node_modules/
+
+# Build artifacts
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db

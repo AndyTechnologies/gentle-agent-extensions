@@ -1,0 +1,31 @@
+# MCP Server Definitions
+# 
+# Place MCP server definition files (*.mcp.json) in this directory.
+# Each file defines one MCP server that can be registered or configured.
+#
+# Format:
+# {
+#   "name": "server-name",
+#   "description": "What this server provides",
+#   "transport": "stdio|http",
+#   "command": "npx",           # for stdio
+#   "args": ["-y", "pkg"],       # for stdio
+#   "url": "https://...",        # for http
+#   "env": {"KEY": "${ENV_VAR}"},  # environment variables (no secrets)
+#   "exposure": "codemode",      # optional: codemode|direct|deferred|hidden
+#   "toolExposure": {},          # optional: per-tool exposure overrides
+#   "enabled": true,             # optional: default true
+#   "timeout": 60,               # optional: seconds
+#   "install": {                 # optional: installation metadata
+#     "package": "@pkg/server",
+#     "version": "1.0.0",
+#     "manager": "npx"
+#   },
+#   "auth": {                    # optional: authentication requirements
+#     "type": "oauth|bearer|none",
+#     "envVar": "TOKEN_ENV_VAR",
+#     "description": "OAuth flow or bearer token"
+#   },
+#   "capabilities": ["tools", "resources"],
+#   "agentDependencies": ["agent-name"]
+# }
