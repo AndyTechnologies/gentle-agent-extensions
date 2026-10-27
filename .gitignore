@@ -1,5 +1,5 @@
 # Project-owned files tracking
-.manifest.json
+# .manifest.json is tracked intentionally
 
 # Test fixtures and temp directories
 tests/fixtures/
@@ -11,6 +11,9 @@ node_modules/
 # Build artifacts
 dist/
 build/
+
+# CodeGraph index
+.codegraph/
 
 # OS files
 .DS_Store

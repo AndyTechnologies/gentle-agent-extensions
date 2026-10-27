@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "description": "Manifest of files managed by gentle-agent-extensions. Used by sync.sh to verify ownership and prevent modification of external files.",
+  "managedPaths": {
+    "extensions": [],
+    "agents": [],
+    "routing": [],
+    "overlays": [],
+    "skills": [],
+    "mcp": [],
+    "scripts": [],
+    "assets": []
+  },
+  "installProfiles": {}
+}
