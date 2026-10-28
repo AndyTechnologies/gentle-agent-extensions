@@ -1,6 +1,6 @@
 {
   "name": "gentle-agent-extensions",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Extend Gentle AI and Gentle Pi with custom agents, overlays, routing, skills, and MCP servers",
   "keywords": ["pi-package", "gentle-pi", "gentle-ai", "extensions", "mcp"],
   "license": "Apache-2.0",
