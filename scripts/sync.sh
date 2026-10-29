@@ -473,14 +473,24 @@ if [[ -d "$MCP_SRC" ]]; then
 	fi
 fi
 
-# 10. Verify extension is installed
+# 10. Verify extension is installed (via package or extensions folder)
 log_info "Verifying extension installation..."
 EXTENSION_TARGET="${AGENT_HOME_EXTENSIONS}/gentle-agent-extensions.ts"
+EXTENSION_INSTALLED=false
 if [[ -f "$EXTENSION_TARGET" ]]; then
 	log_success "Extension found at $EXTENSION_TARGET"
+	EXTENSION_INSTALLED=true
 else
-	log_error "Extension not installed at $EXTENSION_TARGET"
-	log_error "Run install.sh first"
+	# Check if registered as package in settings.json
+	SETTINGS_JSON="${AGENT_HOME}/settings.json"
+	if [[ -f "$SETTINGS_JSON" ]] && grep -q "gentle-agent-extensions" "$SETTINGS_JSON"; then
+		log_success "Extension registered as package in settings.json"
+		EXTENSION_INSTALLED=true
+	fi
+fi
+if [[ "$EXTENSION_INSTALLED" == "false" ]]; then
+	log_error "Extension not installed (not in extensions folder or settings.json)"
+	log_error "Run install.sh first or register with: pi install /home/andy/Proyectos/gentle-agent-extensions"
 	((ISSUES++))
 fi
 

@@ -2,14 +2,38 @@
   "version": "1.0",
   "description": "Manifest of files managed by gentle-agent-extensions. Used by sync.sh to verify ownership and prevent modification of external files.",
   "managedPaths": {
-    "extensions": [],
-    "agents": [],
-    "routing": [],
-    "overlays": [],
-    "skills": [],
+    "extensions": [
+      "extensions/gentle-agent-extensions.ts"
+    ],
+    "agents": [
+      "/home/andy/Proyectos/gentle-agent-extensions/.pi/agents/architecture-council.md"
+    ],
+    "routing": [
+      "routing/architecture-council.md"
+    ],
+    "overlays": [
+      "overlays/orchestrator.overlay.md"
+    ],
+    "skills": [
+      "skills/architecture-quest/SKILL.md"
+    ],
     "mcp": [],
-    "scripts": [],
+    "scripts": [
+      "scripts/install.sh",
+      "scripts/sync.sh",
+      "scripts/doctor.sh"
+    ],
     "assets": []
   },
-  "installProfiles": {}
+  "installProfiles": {
+    "pi": {
+      "agentHome": "~/.pi/agent"
+    },
+    "gentle-shell": {
+      "agentHome": "~/.local/share/gentle-shell/agent"
+    },
+    "gentle-shell-linked": {
+      "agentHome": "~/.pi/agent"
+    }
+  }
 }

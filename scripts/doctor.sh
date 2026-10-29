@@ -121,16 +121,26 @@ else
 	check_fail "Manifest missing: .manifest.json"
 fi
 
-# 3. Extension installation
+# 3. Extension installation (package or extensions folder)
 log_step "Checking extension installation..."
 EXTENSION_TARGET="${AGENT_HOME}/extensions/gentle-agent-extensions.ts"
+EXTENSION_INSTALLED=false
 if [[ -f "$EXTENSION_TARGET" ]]; then
 	check_pass "Extension installed at $EXTENSION_TARGET"
+	EXTENSION_INSTALLED=true
 	if [[ "$VERBOSE" == "true" ]]; then
 		head -30 "$EXTENSION_TARGET"
 	fi
 else
-	check_fail "Extension not found at $EXTENSION_TARGET"
+	# Check if registered as package in settings.json
+	SETTINGS_JSON="${AGENT_HOME}/settings.json"
+	if [[ -f "$SETTINGS_JSON" ]] && grep -q "gentle-agent-extensions" "$SETTINGS_JSON"; then
+		check_pass "Extension registered as package in settings.json"
+		EXTENSION_INSTALLED=true
+	fi
+fi
+if [[ "$EXTENSION_INSTALLED" == "false" ]]; then
+	check_fail "Extension not installed (not in extensions folder or settings.json)"
 fi
 
 # 4. Pi / Gentle Pi installation

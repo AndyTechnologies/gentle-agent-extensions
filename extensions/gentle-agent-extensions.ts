@@ -2,6 +2,7 @@ import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-a
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from "node:fs";
 import { join, resolve, dirname } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
 
 const EXTENSION_NAME = "gentle-agent-extensions";
 const PROJECT_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -135,31 +136,13 @@ function loadMcpServers(): Map<string, McpServerDefinition> {
 		try {
 			server = JSON.parse(content);
 		} catch (error) {
-			console.error(`[${EXTENSION_NAME}] Failed to parse MCP definition ${file}:`, error);
 			continue;
 		}
 
-		// Validate required fields
-		if (!server.name || !server.description || !server.transport) {
-			console.warn(`[${EXTENSION_NAME}] MCP definition ${file} missing required fields (name, description, transport)`);
-			continue;
-		}
-
-		if (server.transport === "stdio" && !server.command) {
-			console.warn(`[${EXTENSION_NAME}] MCP definition ${file}: stdio transport requires 'command'`);
-			continue;
-		}
-
-		if (server.transport === "http" && !server.url) {
-			console.warn(`[${EXTENSION_NAME}] MCP definition ${file}: http transport requires 'url'`);
-			continue;
-		}
-
-		// Validate name format (letters, digits, _, - only)
-		if (!/^[A-Za-z0-9_-]+$/.test(server.name)) {
-			console.warn(`[${EXTENSION_NAME}] MCP definition ${file}: invalid name format (only letters, digits, _, - allowed)`);
-			continue;
-		}
+		if (!server.name || !server.description || !server.transport) continue;
+		if (server.transport === "stdio" && !server.command) continue;
+		if (server.transport === "http" && !server.url) continue;
+		if (!/^[A-Za-z0-9_-]+$/.test(server.name)) continue;
 
 		servers.set(server.name, server);
 	}
@@ -191,9 +174,7 @@ function resolveProjectAgentDir(cwd: string, agentHome: string): string {
 }
 
 function ensureDir(dir: string): void {
-	if (!existsSync(dir)) {
-		mkdirSync(dir, { recursive: true });
-	}
+	if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 }
 
 function appendSystemPromptOnce(options: { appendSystemPrompt?: string } | null | undefined, text: string): void {
@@ -223,64 +204,34 @@ function buildMcpOrchestratorInstructions(): string {
 		} else {
 			instructions += `- **URL**: ${server.url}\n`;
 		}
-		if (server.exposure) {
-			instructions += `- **Exposure**: ${server.exposure}\n`;
-		}
-		if (server.capabilities && server.capabilities.length > 0) {
-			instructions += `- **Capabilities**: ${server.capabilities.join(", ")}\n`;
-		}
-		if (server.agentDependencies && server.agentDependencies.length > 0) {
-			instructions += `- **Recommended for agents**: ${server.agentDependencies.join(", ")}\n`;
-		}
+		if (server.exposure) instructions += `- **Exposure**: ${server.exposure}\n`;
+		if (server.capabilities && server.capabilities.length > 0) instructions += `- **Capabilities**: ${server.capabilities.join(", ")}\n`;
+		if (server.agentDependencies && server.agentDependencies.length > 0) instructions += `- **Recommended for agents**: ${server.agentDependencies.join(", ")}\n`;
 		instructions += "\n";
 	}
 
 	instructions += "When a task requires capabilities from these servers, consider delegating to agents that declare those MCP dependencies, or use the MCP tools directly via `codemode` or `tool_search`.\n";
-
 	return instructions;
 }
 
 function initializeProjectState(cwd: string): void {
 	if (projectState.initialized) return;
-
 	projectState.agents = new Set(discoverProjectAgents());
 	projectState.overlays = loadOverlays();
 	projectState.mcpServers = loadMcpServers();
 	projectState.initialized = true;
-
-	// Log discovered agents
-	const agents = Array.from(projectState.agents);
-	if (agents.length > 0) {
-		console.log(`[${EXTENSION_NAME}] Discovered ${agents.length} custom agent(s): ${agents.join(", ")}`);
-	}
-
-	const overlayTargets = Array.from(projectState.overlays.keys());
-	if (overlayTargets.length > 0) {
-		console.log(`[${EXTENSION_NAME}] Loaded overlays for: ${overlayTargets.join(", ")}`);
-	}
-
-	const mcpServerNames = Array.from(projectState.mcpServers.keys());
-	if (mcpServerNames.length > 0) {
-		console.log(`[${EXTENSION_NAME}] Discovered ${mcpServerNames.length} MCP server(s): ${mcpServerNames.join(", ")}`);
-	}
 }
 
 export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx: ExtensionContext) => {
 		initializeProjectState(ctx.cwd);
 
-		// Register project skills directory with skill registry if available
 		if (existsSync(SKILLS_DIR)) {
-			// The skill registry extension scans projectSkillDirs which includes <cwd>/skills
-			// So our skills are automatically discovered. We just ensure the directory exists.
+			// Skill registry auto-discovers project skills
 		}
 
-		// Register MCP servers via Pi's native API
 		for (const [name, server] of projectState.mcpServers) {
-			if (server.enabled === false) {
-				console.log(`[${EXTENSION_NAME}] MCP server ${name} disabled, skipping registration`);
-				continue;
-			}
+			if (server.enabled === false) continue;
 
 			const config: any = {
 				description: server.description,
@@ -304,44 +255,32 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 
 			try {
 				pi.registerMcpServer(name, config);
-				console.log(`[${EXTENSION_NAME}] Registered MCP server: ${name}`);
 			} catch (error) {
-				console.error(`[${EXTENSION_NAME}] Failed to register MCP server ${name}:`, error);
+				ctx.ui.notify(`[${EXTENSION_NAME}] Failed to register MCP server ${name}: ${error}`, "warning");
 			}
 		}
 
-		// Ensure project agent directory exists
 		const agentHome = getAgentHome(ctx.env);
 		const projectAgentDir = resolveProjectAgentDir(ctx.cwd, agentHome);
 		ensureDir(projectAgentDir);
-
-		// Sync agents from project to project agent directory
 		await syncAgents(ctx.cwd, agentHome);
 	});
 
 	pi.on("before_agent_start", (event, ctx: ExtensionContext) => {
-		if (!projectState.initialized) {
-			initializeProjectState(ctx.cwd);
-		}
+		if (!projectState.initialized) initializeProjectState(ctx.cwd);
 
 		const agentName = (event as { agentName?: string }).agentName;
 		const options = event.systemPromptOptions;
 
-		// Apply orchestrator overlays (when no specific agent, or primary session)
 		if (!agentName || agentName === "orchestrator") {
 			const orchestratorOverlays = projectState.overlays.get("orchestrator") || [];
 			for (const overlay of orchestratorOverlays) {
 				appendSystemPromptOnce(options, `\n\n<!-- gentle-agent-extensions: overlay for orchestrator -->\n${overlay.instructions}`);
 			}
-
-			// Add MCP server information to orchestrator context
 			const mcpInstructions = buildMcpOrchestratorInstructions();
-			if (mcpInstructions) {
-				appendSystemPromptOnce(options, mcpInstructions);
-			}
+			if (mcpInstructions) appendSystemPromptOnce(options, mcpInstructions);
 		}
 
-		// Apply agent-specific overlays
 		if (agentName) {
 			const agentOverlays = projectState.overlays.get(agentName) || [];
 			for (const overlay of agentOverlays) {
@@ -364,7 +303,7 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 	pi.registerCommand("gentle-extensions:doctor", {
 		description: "Check gentle-agent-extensions installation and configuration",
 		handler: async (_args, ctx) => {
-			await runDoctor(ctx.cwd, ctx.env);
+			await runDoctor(ctx.cwd, ctx.env, ctx);
 		},
 	});
 
@@ -408,108 +347,68 @@ async function syncAgents(cwd: string, agentHome: string): Promise<void> {
 
 			if (existsSync(targetPath)) {
 				const targetContent = readFileSync(targetPath, "utf8");
-				if (targetContent === sourceContent) {
-					shouldWrite = false;
-				}
+				if (targetContent === sourceContent) shouldWrite = false;
 			}
 
 			if (shouldWrite) {
 				writeFileSync(targetPath, sourceContent);
-				console.log(`[${EXTENSION_NAME}] Installed agent: ${agentName} -> ${targetPath}`);
-
-				if (!managedAgents.includes(targetPath)) {
-					managedAgents.push(targetPath);
-				}
+				if (!managedAgents.includes(targetPath)) managedAgents.push(targetPath);
 			}
 		} catch (error) {
-			console.error(`[${EXTENSION_NAME}] Failed to sync agent ${agentName}:`, error);
+			ctx.ui?.notify?.(`[${EXTENSION_NAME}] Failed to sync agent ${agentName}: ${error}`, "warning");
 		}
 	}
 
-	// Update manifest
 	manifest.managedPaths = manifest.managedPaths || {};
 	manifest.managedPaths.agents = managedAgents;
 	saveManifest(manifest);
 }
 
-async function runDoctor(cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
+async function runDoctor(cwd: string, env: NodeJS.ProcessEnv, ctx?: ExtensionContext): Promise<void> {
 	const issues: string[] = [];
 	const warnings: string[] = [];
 
-	// Check project structure
 	if (!existsSync(AGENTS_DIR)) warnings.push("agents/ directory missing");
 	if (!existsSync(OVERLAYS_DIR)) warnings.push("overlays/ directory missing");
 	if (!existsSync(ROUTING_DIR)) warnings.push("routing/ directory missing");
 	if (!existsSync(SKILLS_DIR)) warnings.push("skills/ directory missing");
 	if (!existsSync(MCP_DIR)) warnings.push("mcp/ directory missing");
 
-	// Check agent home
 	const agentHome = getAgentHome(env);
-	if (!existsSync(agentHome)) {
-		issues.push(`Agent home not found: ${agentHome}`);
-	}
+	if (!existsSync(agentHome)) issues.push(`Agent home not found: ${agentHome}`);
 
-	// Check project agent directory
 	const projectAgentDir = resolveProjectAgentDir(cwd, agentHome);
-	if (!existsSync(projectAgentDir)) {
-		warnings.push(`Project agent directory does not exist yet: ${projectAgentDir} (will be created on sync)`);
-	}
+	if (!existsSync(projectAgentDir)) warnings.push(`Project agent directory does not exist yet: ${projectAgentDir} (will be created on sync)`);
 
-	// Check manifest
-	if (!existsSync(MANIFEST_PATH)) {
-		warnings.push("Manifest file missing (.manifest.json)");
-	}
+	if (!existsSync(MANIFEST_PATH)) warnings.push("Manifest file missing (.manifest.json)");
 
-	// Check for duplicate agent names in global scope
-	const globalAgentDirs = [
-		join(agentHome, "agents"),
-		join(agentHome, "subagents"),
-	];
-
+	const globalAgentDirs = [join(agentHome, "agents"), join(agentHome, "subagents")];
 	const globalAgents = new Map<string, string>();
 	for (const dir of globalAgentDirs) {
 		if (!existsSync(dir)) continue;
 		for (const file of readdirSync(dir)) {
 			if (!file.endsWith(".md")) continue;
 			const name = file.slice(0, -3);
-			if (globalAgents.has(name)) {
-				warnings.push(`Duplicate agent name in global scope: ${name} (in ${globalAgents.get(name)} and ${dir})`);
-			} else {
-				globalAgents.set(name, dir);
-			}
+			if (globalAgents.has(name)) warnings.push(`Duplicate agent name in global scope: ${name} (in ${globalAgents.get(name)} and ${dir})`);
+			else globalAgents.set(name, dir);
 		}
 	}
 
-	// Check for conflicts between project agents and global agents
 	for (const agentName of projectState.agents) {
-		if (globalAgents.has(agentName)) {
-			warnings.push(`Project agent "${agentName}" shadows global agent in ${globalAgents.get(agentName)}`);
-		}
+		if (globalAgents.has(agentName)) warnings.push(`Project agent "${agentName}" shadows global agent in ${globalAgents.get(agentName)}`);
 	}
 
-	// Check overlays reference existing targets
 	for (const [target] of projectState.overlays) {
 		if (target !== "orchestrator") {
-			// Check if target agent exists (global or project)
 			const targetExists = globalAgents.has(target) || projectState.agents.has(target);
-			if (!targetExists) {
-				warnings.push(`Overlay targets unknown agent: ${target}`);
-			}
+			if (!targetExists) warnings.push(`Overlay targets unknown agent: ${target}`);
 		}
 	}
 
-	// Check MCP server definitions
 	if (existsSync(MCP_DIR)) {
 		for (const [name, server] of projectState.mcpServers) {
-			// Validate server config
-			if (server.transport === "stdio" && !server.command) {
-				warnings.push(`MCP server ${name}: stdio transport missing 'command'`);
-			}
-			if (server.transport === "http" && !server.url) {
-				warnings.push(`MCP server ${name}: http transport missing 'url'`);
-			}
-
-			// Check for env var references that might be secrets
+			if (server.transport === "stdio" && !server.command) warnings.push(`MCP server ${name}: stdio transport missing 'command'`);
+			if (server.transport === "http" && !server.url) warnings.push(`MCP server ${name}: http transport missing 'url'`);
 			if (server.env) {
 				for (const [key, value] of Object.entries(server.env)) {
 					if (value && !value.startsWith("${") && (key.toLowerCase().includes("secret") || key.toLowerCase().includes("token") || key.toLowerCase().includes("key"))) {
@@ -517,31 +416,14 @@ async function runDoctor(cwd: string, env: NodeJS.ProcessEnv): Promise<void> {
 					}
 				}
 			}
-
-			// Check for duplicate names in mcp.json
-			// Note: We can't easily check user/project mcp.json here without ctx
 		}
 	}
 
-	// Report results
 	let output = "gentle-agent-extensions doctor:\n\n";
+	if (issues.length > 0) { output += "❌ Issues:\n"; for (const issue of issues) output += `  - ${issue}\n`; output += "\n"; }
+	if (warnings.length > 0) { output += "⚠️  Warnings:\n"; for (const warning of warnings) output += `  - ${warning}\n`; output += "\n"; }
+	if (issues.length === 0 && warnings.length === 0) output += "✅ All checks passed\n";
 
-	if (issues.length > 0) {
-		output += "❌ Issues:\n";
-		for (const issue of issues) output += `  - ${issue}\n`;
-		output += "\n";
-	}
-
-	if (warnings.length > 0) {
-		output += "⚠️  Warnings:\n";
-		for (const warning of warnings) output += `  - ${warning}\n`;
-		output += "\n";
-	}
-
-	if (issues.length === 0 && warnings.length === 0) {
-		output += "✅ All checks passed\n";
-	}
-
-	// Use console.log since we don't have ctx here
-	console.log(output);
+	if (ctx) ctx.ui.notify(output, issues.length > 0 ? "warning" : "info");
+	else console.log(output);
 }
