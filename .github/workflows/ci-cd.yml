@@ -1,0 +1,94 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write  # needed to create releases/tags
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  release:
+    name: Create GitHub Release
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # need full history for version comparison
+
+      - name: Get package.json version
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if version tag already exists
+        id: tag-check
+        run: |
+          TAG="v${{ steps.pkg.outputs.version }}"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Tag $TAG already exists locally"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Tag $TAG does not exist locally"
+          fi
+
+      - name: Check if GitHub release already exists
+        id: release-check
+        if: steps.tag-check.outputs.exists == 'false'
+        run: |
+          TAG="v${{ steps.pkg.outputs.version }}"
+          if gh release view "$TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Release $TAG already exists on GitHub"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Release $TAG does not exist on GitHub"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Create tag and push
+        if: steps.tag-check.outputs.exists == 'false' && steps.release-check.outputs.exists == 'false'
+        run: |
+          TAG="v${{ steps.pkg.outputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag "$TAG"
+          git push origin "$TAG"
+          echo "Created and pushed tag $TAG"
+
+      - name: Create GitHub Release
+        if: steps.tag-check.outputs.exists == 'false' && steps.release-check.outputs.exists == 'false'
+        run: |
+          TAG="v${{ steps.pkg.outputs.version }}"
+          gh release create "$TAG" \
+            --repo ${{ github.repository }} \
+            --title "gentle-agent-extensions ${{ steps.pkg.outputs.version }}" \
+            --generate-notes
+          echo "Created release $TAG"
+        env:
+          GH_TOKEN: ${{ github.token }}
