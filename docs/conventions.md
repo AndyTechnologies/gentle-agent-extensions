@@ -115,19 +115,24 @@ Where `{target-name}` is either:
 ---
 target: {agent-name|orchestrator}
 priority: 100              # optional, higher = applied later
-mode: append               # currently only 'append' is supported
+mode: append               # optional: append (default), prepend, or replace
 ---
 
 # Overlay for {target-name}
 
 ## Additional Instructions
 
-[Instructions to append to the target's prompt]
+[Instructions to apply to the target's prompt based on mode]
 ```
 
 ### Application Mechanism
 
-Overlays are applied via the `before_agent_start` event by mutating `systemPromptOptions.appendSystemPrompt`. This follows Gentle Pi's established pattern (see `lib/append-system-prompt.ts`).
+Overlays are applied via the `before_agent_start` event. The behavior depends on the `mode`:
+- **append** (default): Adds instructions after the existing system prompt via `systemPromptOptions.appendSystemPrompt`
+- **prepend**: Adds instructions before the existing system prompt
+- **replace**: Replaces the entire system prompt with the overlay instructions
+
+This follows Gentle Pi's established pattern (see `lib/append-system-prompt.ts`).
 
 ## 4. Skills (`skills/`)
 

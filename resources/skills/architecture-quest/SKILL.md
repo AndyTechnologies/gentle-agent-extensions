@@ -3,7 +3,7 @@ name: architecture-quest
 description: "Trigger: architecture quest, architectural exploration, design decision, contract architecturale. Explores architectural needs, identifies gaps, formulates user questions, and records a verifiable architectural contract for ODD tasks."
 license: Apache-2.0
 metadata:
-  author: gentleman-programming
+  author: AndyTechnologies
   version: "1.0"
 ---
 

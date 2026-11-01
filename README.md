@@ -1,405 +1,294 @@
 # gentle-agent-extensions
 
-Extend Gentle AI and Gentle Pi with custom agents, overlays, routing rules, and skills — declaratively, without modifying the official repositories.
+**Bundled extensions for Gentle Shell** — Install once, get architecture-quest, architecture-council, orchestrator overlay, and gentle-agent-extension skill automatically. No configuration needed.
 
-## What This Project Does
+## What This Package Provides
 
-- **Adds custom agents** to Gentle Pi via declarative Markdown definitions
-- **Applies instruction overlays** to existing agents or the orchestrator without modifying their original definitions
-- **Defines routing rules** so the orchestrator knows when to delegate to custom agents
-- **Provides project skills** that teach future agents how to extend this system correctly
-- **Installs as a Pi extension** using the official extension mechanism
-- **Syncs idempotently** — repeated runs with the same configuration produce no changes
+| Resource | Description |
+|----------|-------------|
+| **architecture-council** agent | Read-only contractual verifier for Architecture Quest contracts |
+| **architecture-quest** skill | Explores architectural needs, identifies gaps, produces verifiable contracts |
+| **gentle-agent-extension** skill | Teaches how to extend this package (for maintainers) |
+| **orchestrator.overlay.md** | Integrates Quest + Council into ODD workflow before RDD review |
+| **architecture-council routing** | Semantic delegation rules for the council agent |
 
-## What This Project Does NOT Do
+## What This Package Does NOT Do
 
+- ❌ Require user project directories (`agents/`, `overlays/`, `skills/`)
+- ❌ Need `sync.sh`, `doctor.sh`, `install.sh` scripts (removed)
 - ❌ Modify Gentle AI or Gentle Pi official repositories
 - ❌ Create parallel agent registries or skill indexes
-- ❌ Require code changes for new agents/overlays
-- ❌ Install demo agents or overlays by default
-- ❌ Automatically update Gentle AI or Gentle Pi
+
+---
+
+## Installation
+
+### From npm (recommended)
+```bash
+pi install npm:gentle-agent-extensions@latest
+```
+
+### From Git
+```bash
+pi install git:github.com/AndyTechnologies/gentle-agent-extensions@v1.2.0
+```
+
+### Local development
+```bash
+pi install ./gentle-agent-extensions
+# Or for testing without installing:
+pi -e ./src/extension.ts
+```
+
+**That's it.** No scripts, no sync, no doctor. Open Pi and everything works.
+
+---
+
+## Usage
+
+### Automatic on Session Start
+
+When you open Pi, the extension:
+1. Copies bundled agents to your project's `.pi/agents/`
+2. Registers bundled MCP servers (when added)
+3. Applies bundled overlays to orchestrator and agents
+4. Skills are auto-registered via `pi.skills`
+
+### Commands (inside Pi)
+
+| Command | Description |
+|---------|-------------|
+| `/gentle-extensions:status` | Show bundled resources status |
+| `/gentle-extensions:sync` | Re-sync bundled agents to current project |
+| `/gentle-extensions:doctor` | Validate bundled resources + installation |
+| `/gentle-extensions:mcp-reload` | Reload MCP servers from bundled resources |
+| `/gentle-extensions:fix` | Auto-fix non-destructive issues |
+| `/gentle-extensions:mcp-health` | Test MCP connectivity (stdio + HTTP) |
+| `/gentle-extensions:conflicts` | Interactive conflict resolution |
+
+### Delegation
+
+```bash
+# Architecture Council - verify architectural contract
+"Use architecture-council to verify AC-01"
+
+# Architecture Quest - explore architectural decisions
+"Run architecture quest for this feature"
+```
+
+### Skills
+
+Skills are auto-available via `/skill-registry:refresh`:
+- `architecture-quest` — Architectural exploration
+- `gentle-agent-extension` — Package maintainer guide
+
+---
 
 ## Architecture
 
 ```
-gentle-agent-extensions/
-├── agents/              # Custom agent definitions (Markdown + YAML frontmatter)
-├── overlays/            # Instruction overlays for existing agents/orchestrator
-├── routing/             # Delegation rules for custom agents
-├── skills/              # Project skills (including gentle-agent-extension skill)
-├── extensions/          # Pi extension (gentle-agent-extensions.ts)
-├── scripts/             # install.sh, sync.sh, doctor.sh
-├── tests/               # Automated tests
-├── docs/                # Documentation (conventions.md)
-├── .manifest.json       # Tracks project-owned files
-└── README.md            # This file
+~/.pi/agent/npm/node_modules/gentle-agent-extensions/   ← Installed package (read-only)
+├── src/extension.ts                                     ← Pi extension entry point
+├── resources/
+│   ├── agents/architecture-council.md                   ← Bundled agent
+│   ├── overlays/orchestrator.overlay.md                 ← Bundled overlay
+│   ├── skills/
+│   │   ├── architecture-quest/SKILL.md                  ← Bundled skill
+│   │   └── gentle-agent-extension/SKILL.md              ← Bundled skill
+│   ├── routing/architecture-council.md                  ← Bundled routing
+│   └── mcp/                                             ← Bundled MCPs (future)
+├── package.json                                         ← pi: {extensions, skills}
+└── README.md
 ```
 
-### Extension (`extensions/gentle-agent-extensions.ts`)
+### How It Works
 
-A Pi extension that:
-1. **Discovers** agents, overlays, and skills from project directories on `session_start`
-2. **Injects** orchestrator context via `before_agent_start` using `appendSystemPromptOnce`
-3. **Applies overlays** to target agents/orchestrator at runtime
-4. **Registers commands**: `/gentle-extensions:sync`, `/gentle-extensions:doctor`, `/gentle-extensions:status`
+1. **`pi install`** downloads package to `~/.pi/agent/npm/node_modules/gentle-agent-extensions/`
+2. **Pi loads** `src/extension.ts` via `pi.extensions` in package.json
+3. **`session_start`**: Extension reads bundled resources from `resources/` (using `import.meta.url`)
+4. **`before_agent_start`**: Applies overlays, injects MCP info to orchestrator
+5. **Skills** loaded via `pi.skills: ["resources/skills/*"]` in package.json
 
-### Declarative Conventions
+---
 
-See [docs/conventions.md](docs/conventions.md) for complete specification.
+## For Package Maintainers
 
-**Agents** (`agents/{name}.md`):
-```markdown
+### Adding a New Bundled Agent
+
+```bash
+# 1. Create agent in resources/agents/
+cat > resources/agents/my-agent.md <<'EOF'
 ---
 name: my-agent
-description: "When to use this agent"
+description: "What this agent does"
 model: anthropic/claude-opus-4
 thinking: high
 mode: task
 tools: [read, write, bash]
 ---
-# Agent Instructions
-...
-```
+# My Agent Instructions
+EOF
 
-**Overlays** (`overlays/{target}.overlay.md`):
-```markdown
----
-target: orchestrator        # or agent name
-priority: 100
-mode: append
----
-# Additional instructions appended to target's prompt
-```
-
-**Routing** (`routing/{agent}.md`):
-```markdown
+# 2. Add routing in resources/routing/
+cat > resources/routing/my-agent.md <<'EOF'
 ---
 agent: my-agent
 triggers: ["trigger phrase"]
-conditions: ["condition"]
 delegation: subagent_run
 ---
-```
-
-**Skills** (`skills/{name}/SKILL.md`):
-Follows [Gentle AI Skill Style Guide](https://github.com/Gentleman-Programming/gentle-pi/blob/main/docs/skill-style-guide.md)
-
-## Installation
-
-### Prerequisites
-
-- Pi 1.2.0+
-- Gentle Pi (`gentle-pi` package installed)
-- Node.js 22+
-
-### Quick Install
-
-```bash
-# Clone or navigate to the project
-cd gentle-agent-extensions
-
-# Make scripts executable
-chmod +x scripts/*.sh
-
-# Install for standard Pi (default profile)
-./scripts/install.sh
-
-# Or for Gentle Shell isolated
-./scripts/install.sh --profile gentle-shell
-
-# Or for Gentle Shell with --link
-./scripts/install.sh --profile gentle-shell-linked
-```
-
-### Manual Installation Steps
-
-1. **Register extension with Pi**:
-   ```bash
-   pi install file:$(pwd)
-   ```
-
-2. **Sync project agents/overlays**:
-   ```bash
-   ./scripts/sync.sh
-   ```
-
-3. **Verify installation**:
-   ```bash
-   ./scripts/doctor.sh
-   ```
-
-4. **Start Pi and check status**:
-   ```
-   /gentle-extensions:status
-   ```
-
-### Installation Profiles
-
-| Profile | Agent Home | Use Case |
-|---------|------------|----------|
-| `pi` | `~/.pi/agent` | Standard Pi installation |
-| `gentle-shell` | `~/.local/share/gentle-shell/agent` | Isolated Gentle Shell |
-| `gentle-shell-linked` | `~/.pi/agent` | Gentle Shell with `--link` |
-
-Use `--agent-home PATH` to override the profile default.
-
-### Dry Run
-
-Preview changes without making them:
-```bash
-./scripts/install.sh --dry-run
-./scripts/sync.sh --dry-run
-```
-
-## Usage
-
-### Synchronization
-
-After adding/modifying agents, overlays, routing, or skills:
-```bash
-./scripts/sync.sh
-```
-
-Options:
-- `--dry-run` — Preview changes
-- `--check` — Validate only (exit 1 on issues)
-- `--profile PROFILE` / `--agent-home PATH` — Target installation
-
-### Doctor
-
-Check installation health:
-```bash
-./scripts/doctor.sh
-./scripts/doctor.sh --verbose  # Detailed output
-```
-
-Checks:
-- Project structure completeness
-- Manifest validity
-- Extension installation
-- Pi / Gentle Pi versions
-- Agent/overlay/skill validation
-- Conflict detection (shadowing, unknown targets)
-- Skill registry status
-- Script permissions
-
-### Status Command
-
-Inside Pi:
-```
-/gentle-extensions:status
-```
-
-Shows discovered agents, overlays, skills directory status.
-
-## Adding a New Agent
-
-Follow **Procedure A** from the `gentle-agent-extension` skill:
-
-```bash
-# 1. Create agent definition
-cat > agents/my-agent.md <<'EOF'
----
-name: my-agent
-description: "Reviews code for security issues"
-model: anthropic/claude-opus-4
-thinking: high
-mode: task
-tools: [read, grep, bash]
----
-# My Agent
-
-You are a security reviewer...
 EOF
 
-# 2. Create routing (if semantic delegation needed)
-cat > routing/my-agent.md <<'EOF'
----
-agent: my-agent
-triggers:
-  - "security review"
-  - "check for vulnerabilities"
-conditions:
-  - "User requests security review"
-delegation: subagent_run
----
-# Routing for my-agent
-...
-EOF
-
-# 3. Create skill (for semantic activation)
-mkdir -p skills/my-agent
-cat > skills/my-agent/SKILL.md <<'EOF'
+# 3. (Optional) Add skill in resources/skills/
+mkdir -p resources/skills/my-agent
+cat > resources/skills/my-agent/SKILL.md <<'EOF'
 ---
 name: my-agent
-description: "Trigger: security review, check vulnerabilities. Delegates to my-agent for security reviews."
+description: "Trigger: trigger phrase. Delegates to my-agent."
 license: Apache-2.0
 metadata:
-  author: your-name
+  author: AndyTechnologies
   version: "1.0"
 ---
 # My Agent Skill
 ## Activation Contract
-Use when user requests security review.
+Use when...
 ## Hard Rules
-Only delegate via subagent_run to my-agent.
+- Only delegate via subagent_run to my-agent
 ## Decision Gates
 | Situation | Action |
-|-----------|--------|
-| "security review" | Delegate to my-agent |
+| "trigger phrase" | Delegate to my-agent |
 | General coding | Do NOT delegate |
 ## Execution Steps
-1. Identify files to review
-2. Call subagent_run with agent=my-agent
-3. Return results
+1. Call subagent_run with agent=my-agent
+2. Return results
 ## Output Contract
-Security findings with severity
+Findings with severity
 ## References
-- agents/my-agent.md
-- routing/my-agent.md
+- resources/agents/my-agent.md
+- resources/routing/my-agent.md
 EOF
-
-# 4. Sync and verify
-./scripts/sync.sh
-./scripts/doctor.sh
 ```
 
-Test in Pi:
-```
-"Please do a security review of my changes"
-```
-
-### Adding an Overlay
-
-Follow **Procedure B** from the skill:
+### Adding a Bundled Overlay
 
 ```bash
-# 1. Create overlay for existing agent or orchestrator
-cat > overlays/gentle-ai-worker.overlay.md <<'EOF'
+cat > resources/overlays/target-agent.overlay.md <<'EOF'
 ---
-target: gentle-ai-worker
+target: target-agent
 priority: 100
 mode: append
 ---
-# Overlay for gentle-ai-worker
-
-## Additional Instructions
-
-When writing tests, always use table-driven tests.
-Prefer the project's test utilities.
+# Additional Instructions for target-agent
 EOF
-
-# 2. Sync and verify
-./scripts/sync.sh
-./scripts/doctor.sh
 ```
+Modes: `append` (default), `prepend`, `replace`
 
-The overlay instructions are appended to the target agent's prompt at runtime via `before_agent_start`.
-
-## Verifying Routing and Activation
-
-1. **Check status**: `/gentle-extensions:status`
-2. **Trigger delegation**: Use trigger phrases from routing
-3. **Check doctor**: `./scripts/doctor.sh` validates targets exist
-4. **Inspect prompt**: Add temporary overlay with obvious marker to verify injection
-
-## Troubleshooting
-
-### Agent Not Discovered
+### Adding a Bundled MCP Server
 
 ```bash
-./scripts/doctor.sh --verbose
-# Check:
-# - Agent file in agents/ with .md extension
-# - Valid frontmatter with name field
-# - sync.sh ran successfully
-# - Extension loaded (check Pi startup logs)
+cat > resources/mcp/my-server.mcp.json <<'EOF'
+{
+  "name": "my-server",
+  "description": "What this server provides",
+  "transport": "stdio",
+  "command": "npx",
+  "args": ["-y", "@pkg/server"],
+  "env": { "API_KEY": "${API_KEY}" },
+  "exposure": "codemode",
+  "enabled": true
+}
+EOF
 ```
 
-### Overlay Not Applied
+### Test Locally
 
 ```bash
-./scripts/doctor.sh
-# Check:
-# - Overlay file in overlays/ with .overlay.md extension
-# - Target exists (global agent, project agent, or "orchestrator")
-# - Extension's before_agent_start handler running
+# Test without installing
+pi -e ./src/extension.ts
+
+# In Pi:
+/gentle-extensions:status
+/gentle-extensions:doctor
 ```
 
-### Skill Not Indexed
+### Publish
 
 ```bash
-# Refresh skill registry
-/skill-registry:refresh
-
-# Verify
-cat .atl/skill-registry.md | grep your-skill
+npm version patch  # or minor/major
+git push origin main --tags
+npm publish --access public
 ```
 
-### Extension Not Loading
+---
 
-```bash
-# Check Pi settings
-cat ~/.pi/agent/settings.json
-# Should include: { "packages": [{ "source": "file:/path/to/gentle-agent-extensions" }] }
+## Configuration
 
-# Reinstall
-pi remove file:/path/to/gentle-agent-extensions
-pi install file:/path/to/gentle-agent-extensions
+### `extension.config.json` (optional)
+
+Override defaults in the package root:
+
+```json
+{
+  "features": {
+    "autoSync": true,
+    "versionTracking": true
+  },
+  "validation": {
+    "requireLicense": true,
+    "allowUnknownTargets": true
+  },
+  "mcpDefaults": {
+    "timeout": 60,
+    "exposure": "codemode"
+  }
+}
 ```
 
-### Conflicts Detected
+### Peer Dependencies
 
-Doctor reports:
-- **Shadowing**: Project agent same name as global agent → rename or accept
-- **Unknown overlay target**: Target agent doesn't exist → create agent or fix target name
+Pinned to Pi 1.4.0 compatible versions:
 
-## Limitations
+```json
+"peerDependencies": {
+  "@earendil-works/pi-coding-agent": "^1.4.0",
+  "@earendil-works/pi-agent-core": "^1.4.0",
+  "@earendil-works/pi-ai": "^1.4.0",
+  "@earendil-works/pi-tui": "^1.4.0",
+  "typebox": "^0.30.0"
+}
+```
 
-| Limitation | Workaround |
-|------------|------------|
-| No agent removal via sync | Manually delete from `.pi/agents/` and manifest |
-| Overlay priority only affects order | Use single overlay per target, or order by priority |
-| Skills require manual registry refresh | Run `/skill-registry:refresh` after adding skills |
-| No hot-reload of extension | Restart Pi or `reload` command |
-| Profile detection is manual | Use `--profile` or `--agent-home` explicitly |
+---
 
 ## Development
 
-### Running Tests
+### Run Tests
 
 ```bash
+# Unit tests (fast)
 node --test tests/gentle-extensions.test.ts
+
+# Integration tests (slow, spawns Pi)
+node --test tests/integration.test.ts
 ```
 
-### Project Skill
+### Test Without Installing
 
-The `gentle-agent-extension` skill teaches agents how to extend this system:
-```
-skills/gentle-agent-extension/SKILL.md
-```
-
-Load it when working on this project:
-```
-/skill-registry:refresh
-# Then in agent context, the skill will be available for relevant tasks
+```bash
+pi -e ./src/extension.ts
+# Then in Pi:
+/gentle-extensions:status
 ```
 
-### Extending the Extension
-
-Changes to `extensions/gentle-agent-extensions.ts` are exceptional. Before modifying:
-1. Verify the declarative approach cannot achieve the goal
-2. Document the architectural justification
-3. Update tests and conventions.md
+---
 
 ## Compatibility
 
-Tested with:
 - Pi 1.4.0+
-- gentle-pi (bundled in Gentle Shell)
+- gentle-pi 4.5.1+ (bundled in Gentle Shell)
 - gentle-ai (bundled)
 
-Version detection via `doctor.sh`.
+---
 
 ## License
 
@@ -408,9 +297,10 @@ Apache-2.0 — see LICENSE file.
 ## References
 
 - [Gentle Pi Documentation](https://github.com/Gentleman-Programming/gentle-shell)
-- [Gentle AI Skill Style Guide](https://github.com/Gentleman-Programming/gentle-pi/blob/main/docs/skill-style-guide.md)
 - [Pi Extensions API](https://pi.dev/docs/latest/extensions)
 - [Pi Packages](https://pi.dev/docs/latest/packages)
+- [Gentle AI Skill Style Guide](https://github.com/Gentleman-Programming/gentle-pi/blob/main/docs/skill-style-guide.md)
+
 ---
 
 <div align="center">

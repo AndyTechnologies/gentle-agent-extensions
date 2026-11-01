@@ -1,26 +1,29 @@
 {
   "name": "gentle-agent-extensions",
-  "version": "1.1.0",
-  "description": "Extend Gentle AI and Gentle Pi with custom agents, overlays, routing, skills, and MCP servers",
-  "keywords": ["pi-package", "gentle-pi", "gentle-ai", "extensions", "mcp"],
+  "version": "1.2.0",
+  "description": "Bundled extensions for Gentle Shell: architecture-quest, architecture-council, orchestrator overlay, and more",
+  "keywords": ["pi-package", "gentle-pi", "gentle-ai", "extensions", "mcp", "architecture"],
   "license": "Apache-2.0",
-  "author": "Gentleman Programming",
+  "author": "AndyTechnologies",
   "repository": {
     "type": "git",
     "url": "https://github.com/AndyTechnologies/gentle-agent-extensions.git"
   },
   "pi": {
-    "extensions": ["extensions/gentle-agent-extensions.ts"],
-    "skills": ["skills/*"],
+    "extensions": ["src/extension.ts"],
+    "skills": ["resources/skills/*"],
     "prompts": [],
     "themes": []
   },
+  "files": [
+    "src/",
+    "resources/"
+  ],
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-agent-core": "*",
-    "@earendil-works/pi-ai": "*",
-    "@earendil-works/pi-tui": "*",
-    "typebox": "*"
-  },
-  "devDependencies": {}
+    "@earendil-works/pi-coding-agent": "^1.4.0",
+    "@earendil-works/pi-agent-core": "^1.4.0",
+    "@earendil-works/pi-ai": "^1.4.0",
+    "@earendil-works/pi-tui": "^1.4.0",
+    "typebox": "^0.30.0"
+  }
 }

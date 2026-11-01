@@ -1,0 +1,27 @@
+{
+  "sourceDirs": {
+    "agents": "agents",
+    "overlays": "overlays",
+    "routing": "routing",
+    "skills": "skills",
+    "mcp": "mcp",
+    "scripts": "scripts",
+    "extensions": "extensions"
+  },
+  "manifestPath": ".manifest.json",
+  "features": {
+    "autoSync": true,
+    "mcpHealthCheck": false,
+    "versionTracking": true,
+    "interactiveConflicts": false
+  },
+  "validation": {
+    "requireLicense": true,
+    "requireMetadata": false,
+    "allowUnknownTargets": true
+  },
+  "mcpDefaults": {
+    "timeout": 60,
+    "exposure": "codemode"
+  }
+}
