@@ -1,6 +1,6 @@
 {
   "name": "gentle-agent-extensions",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Bundled extensions for Gentle Shell: architecture-quest, architecture-council, orchestrator overlay, and more",
   "keywords": ["pi-package", "gentle-pi", "gentle-ai", "extensions", "mcp", "architecture"],
   "license": "Apache-2.0",
@@ -13,20 +13,22 @@
     "extensions": ["src/extension.ts"],
     "skills": ["resources/skills/*"],
     "prompts": [],
-    "themes": []
+    "themes": [],
+    "changelogPath": "CHANGELOG.md"
   },
   "files": [
     "src/",
-    "resources/"
+    "resources/",
+    "CHANGELOG.md"
   ],
   "scripts": {
     "test": "echo 'No tests specified' && exit 0"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^1.4.0",
-    "@earendil-works/pi-agent-core": "^1.4.0",
-    "@earendil-works/pi-ai": "^1.4.0",
-    "@earendil-works/pi-tui": "^1.4.0",
+    "@earendil-works/pi-coding-agent": "^1.5.0",
+    "@earendil-works/pi-agent-core": "^1.5.0",
+    "@earendil-works/pi-ai": "^1.5.0",
+    "@earendil-works/pi-tui": "^1.5.0",
     "typebox": "^1.4.0"
   }
 }
