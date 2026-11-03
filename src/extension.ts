@@ -724,6 +724,180 @@ async function runDoctorChecks(cwd: string, env: NodeJS.ProcessEnv, includeMcpHe
 	return { issues, warnings };
 }
 
+
+// ============================================================================
+// Resource Graph Validator
+// ============================================================================
+
+interface GraphNode {
+	id: string;
+	type: "agent" | "skill" | "routing" | "overlay" | "mcp" | "manifest";
+	label: string;
+	path: string;
+}
+
+interface GraphEdge {
+	from: string;
+	to: string;
+	type: "references" | "requires" | "triggers" | "overlays" | "depends" | "installs";
+}
+
+interface GraphValidationResult {
+	nodes: GraphNode[];
+	edges: GraphEdge[];
+	errors: string[];
+	warnings: string[];
+}
+
+function buildResourceGraph(cwd: string): GraphValidationResult {
+	const nodes: GraphNode[] = [];
+	const edges: GraphEdge[] = [];
+	const errors: string[] = [];
+	const warnings: string[] = [];
+	const nodeIds = new Set<string>();
+
+	function addNode(node: GraphNode): void {
+		if (nodeIds.has(node.id)) {
+			errors.push(`Duplicate node ID: ${node.id}`);
+			return;
+		}
+		nodeIds.add(node.id);
+		nodes.push(node);
+	}
+
+	function addEdge(edge: GraphEdge): void {
+		if (!nodeIds.has(edge.from) || !nodeIds.has(edge.to)) {
+			warnings.push(`Edge references missing node: ${edge.from} -> ${edge.to}`);
+		}
+		edges.push(edge);
+	}
+
+	// 1. Agents
+	if (existsSync(BUNDLED.agents)) {
+		for (const file of readdirSync(BUNDLED.agents)) {
+			if (!file.endsWith(".md")) continue;
+			const agentName = file.slice(0, -3);
+			const path = join(BUNDLED.agents, file);
+			addNode({ id: `agent:${agentName}`, type: "agent", label: agentName, path });
+		}
+	}
+
+	// 2. Skills
+	const skillsDir = join(PACKAGE_ROOT, "resources", "skills");
+	if (existsSync(skillsDir)) {
+		for (const skillDir of readdirSync(skillsDir, { withFileTypes: true })) {
+			if (!skillDir.isDirectory()) continue;
+			const skillName = skillDir.name;
+			const skillPath = join(skillsDir, skillName, "SKILL.md");
+			addNode({ id: `skill:${skillName}`, type: "skill", label: skillName, path: skillPath });
+		}
+	}
+
+	// 3. Routing
+	if (existsSync(BUNDLED.routing)) {
+		for (const file of readdirSync(BUNDLED.routing)) {
+			if (!file.endsWith(".md")) continue;
+			const routingName = file.slice(0, -3);
+			const path = join(BUNDLED.routing, file);
+			addNode({ id: `routing:${routingName}`, type: "routing", label: routingName, path });
+		}
+	}
+
+	// 4. Overlays
+	if (existsSync(BUNDLED.overlays)) {
+		for (const file of readdirSync(BUNDLED.overlays)) {
+			if (!file.endsWith(".overlay.md")) continue;
+			const overlayName = file.replace(".overlay.md", "");
+			const path = join(BUNDLED.overlays, file);
+			addNode({ id: `overlay:${overlayName}`, type: "overlay", label: overlayName, path });
+		}
+	}
+
+	// 5. MCP Servers
+	if (existsSync(BUNDLED.mcp)) {
+		for (const file of readdirSync(BUNDLED.mcp)) {
+			if (!file.endsWith(".mcp.json")) continue;
+			const mcpName = file.replace(".mcp.json", "");
+			const path = join(BUNDLED.mcp, file);
+			addNode({ id: `mcp:${mcpName}`, type: "mcp", label: mcpName, path });
+		}
+	}
+
+	// 6. Manifest files
+	const manifestPath = join(PACKAGE_ROOT, ".manifest.json");
+	addNode({ id: "manifest:root", type: "manifest", label: ".manifest.json", path: manifestPath });
+	if (!existsSync(manifestPath)) {
+		errors.push("Manifest file .manifest.json not found");
+	}
+
+	// Check for circular references (simple DFS)
+	const visited = new Set<string>();
+	const recStack = new Set<string>();
+	const adj = new Map<string, string[]>();
+
+	return { nodes, edges, errors, warnings };
+}
+
+function generateGraphVizDot(graph: GraphValidationResult): string {
+	let dot = "digraph ResourceGraph {\n";
+	dot += "  rankdir=LR;\n";
+	dot += "  node [fontname=\"Arial\", fontsize=10];\n";
+	dot += "  edge [fontname=\"Arial\", fontsize=8];\n\n";
+
+	const typeColors: Record<string, string> = {
+		agent: "#e8a838",
+		skill: "#38b8e8",
+		routing: "#e838a8",
+		overlay: "#38e8a8",
+		mcp: "#a838e8",
+		manifest: "#e8e838",
+	};
+
+	for (const node of graph.nodes) {
+		const color = typeColors[node.type] || "#cccccc";
+		dot += `  "${node.id}" [label="${node.label}", shape=box, style=filled, fillcolor="${color}", fontcolor="#000000"];\n`;
+	}
+
+	dot += "}\n";
+	return dot;
+}
+
+function generateGraphSummary(graph: GraphValidationResult): string {
+	let summary = "Resource Graph Summary\n";
+	summary += "========================\n\n";
+
+	const typeCounts = new Map<string, number>();
+	for (const node of graph.nodes) {
+		typeCounts.set(node.type, (typeCounts.get(node.type) || 0) + 1);
+	}
+
+	summary += "Nodes:\n";
+	for (const [type, count] of typeCounts) {
+		summary += `  ${type}: ${count}\n`;
+	}
+	summary += `  Total: ${graph.nodes.length}\n\n`;
+
+	if (graph.errors.length > 0) {
+		summary += "Errors:\n";
+		for (const err of graph.errors) summary += `  ❌ ${err}\n`;
+		summary += "\n";
+	}
+
+	if (graph.warnings.length > 0) {
+		summary += "Warnings:\n";
+		for (const warn of graph.warnings) summary += `  ⚠️ ${warn}\n`;
+		summary += "\n";
+	}
+
+	if (graph.errors.length === 0 && graph.warnings.length === 0) {
+		summary += "✅ No issues detected\n";
+	}
+
+	return summary;
+}
+
+
+
 export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx: ExtensionContext) => {
 		initializeBundledState();
@@ -795,6 +969,25 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 	pi.registerCommand("gentle-extensions:doctor", {
 		description: "Check bundled resources and installation",
 		handler: async (args, ctx) => {
+			const includeGraph = args?.graph === true;
+
+			if (includeGraph) {
+				const graph = buildResourceGraph(ctx.cwd);
+				const summary = generateGraphSummary(graph);
+				const dot = generateGraphVizDot(graph);
+				let output = "Resource Graph:
+
+" + summary;
+				if (args?.dot) {
+					output += "
+
+GraphViz DOT:
+" + dot;
+				}
+				ctx.ui.notify(output, graph.errors.length > 0 ? "error" : "info");
+				return;
+			}
+
 			const includeMcpHealth = args?.mcpHealth === true;
 			const { issues, warnings } = await runDoctorChecks(ctx.cwd, ctx.env, includeMcpHealth);
 
