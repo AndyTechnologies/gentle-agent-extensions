@@ -1,6 +1,6 @@
 {
   "name": "gentle-agent-extensions",
-  "version": "1.3.4",
+  "version": "1.3.5",
   "description": "Bundled extensions for Gentle Shell: architecture-quest, architecture-council, orchestrator overlay, and more",
   "keywords": [
     "pi-package",
