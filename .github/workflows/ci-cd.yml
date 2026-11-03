@@ -151,8 +151,7 @@ jobs:
         run: |
           npm publish --access public --provenance
           echo "Published successfully via Trusted Publishers"
-        env:
-          # No NODE_AUTH_TOKEN: Trusted Publishers (OIDC) handles auth via github.token
-          # 2FA on npm does NOT block OIDC publishes
-          # REQUIRES: Trusted Publisher configured at PACKAGE level in npm:
-          #   https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers
+        # No NODE_AUTH_TOKEN: Trusted Publishers (OIDC) handles auth via github.token
+        # 2FA on npm does NOT block OIDC publishes
+        # REQUIRES: Trusted Publisher configured at PACKAGE level in npm:
+        #   https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers
