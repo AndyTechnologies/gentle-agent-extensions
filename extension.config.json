@@ -1,12 +1,10 @@
 {
   "sourceDirs": {
-    "agents": "agents",
-    "overlays": "overlays",
-    "routing": "routing",
-    "skills": "skills",
-    "mcp": "mcp",
-    "scripts": "scripts",
-    "extensions": "extensions"
+    "agents": "resources/agents",
+    "overlays": "resources/overlays",
+    "routing": "resources/routing",
+    "skills": "resources/skills",
+    "mcp": "resources/mcp"
   },
   "manifestPath": ".manifest.json",
   "features": {

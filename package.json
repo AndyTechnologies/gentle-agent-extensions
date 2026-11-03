@@ -33,7 +33,7 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "echo 'No tests specified' && exit 0"
+    "test": "npx tsx tests/gentle-extensions.test.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "^1.5.0",

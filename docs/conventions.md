@@ -6,26 +6,32 @@ This document defines the file structure and conventions for extending Gentle AI
 
 ```
 gentle-agent-extensions/
-├── agents/              # Custom agent definitions (Markdown with YAML frontmatter)
-├── routing/             # Routing instructions for custom agents
-├── overlays/            # Instruction overlays for orchestrator and existing agents
-├── skills/              # Project skills for agent programming
-├── mcp/                 # MCP server definitions (JSON)
-├── scripts/             # Installation and synchronization scripts
-├── tests/               # Automated tests
-├── assets/              # Templates, schemas, examples
-├── docs/                # Documentation
-└── .manifest.json       # Track project-owned files
+├── src/extension.ts          # Pi extension entry point
+├── resources/
+│   ├── agents/               # Custom agent definitions (Markdown with YAML frontmatter)
+│   ├── routing/              # Routing instructions for custom agents
+│   ├── overlays/             # Instruction overlays for orchestrator and existing agents
+│   ├── skills/               # Project skills for agent programming
+│   └── mcp/                  # MCP server definitions (JSON) — optional
+├── tests/                    # Automated tests
+├── assets/                   # Templates, schemas, examples
+├── docs/                     # Documentation
+├── package.json
+├── CHANGELOG.md
+├── README.md
+└── extension.config.json
 ```
 
-## 1. Agent Definitions (`agents/`)
+> **Note:** The old structure with `agents/`, `routing/`, `overlays/`, `skills/`, `scripts/`, `mcp/` at project root has been replaced by the bundled structure under `resources/`. The extension loads resources from `resources/` using `import.meta.url`.
+
+## 1. Agent Definitions (`resources/agents/`)
 
 Custom agents follow Gentle Pi's native agent format: Markdown files with YAML frontmatter.
 
 ### File Naming
 
 ```
-agents/{agent-name}.md
+resources/agents/{agent-name}.md
 ```
 
 ### Frontmatter Schema
@@ -45,22 +51,22 @@ tools: [tool1, tool2, ...]        # optional, defaults to Pi defaults
 
 The body contains the agent's instructions/prompt. This follows the same format as Gentle AI's agent definitions.
 
-### Discovery
+### Discovery & Sync
 
 Agents are discovered by Gentle Pi from:
 - Global: `~/.pi/agent/agents/`, `~/.pi/agent/subagents/`
 - Project: `<cwd>/.pi/agents/`, `<cwd>/.pi/subagents/`
 
-This project's `sync.sh` will symlink or copy agents from `agents/` to the appropriate project directory.
+The extension's `session_start` handler copies bundled agents from `resources/agents/` to the project's `.pi/agents/` directory (see `copyBundledAgentsToProject()` in `src/extension.ts`).
 
-## 2. Routing Instructions (`routing/`)
+## 2. Routing Instructions (`resources/routing/`)
 
 Routing instructions tell the orchestrator when to delegate to a custom agent.
 
 ### File Naming
 
 ```
-routing/{agent-name}.md
+resources/routing/{agent-name}.md
 ```
 
 ### Format
@@ -95,14 +101,16 @@ Use the `subagent_run` tool with:
 
 Each agent that needs semantic routing should have an associated skill in `skills/` with an explicit Activation Contract.
 
-## 3. Overlays (`overlays/`)
+The extension loads routing files via `loadBundledRouting()` and makes them available to the orchestrator overlay.
+
+## 3. Overlays (`resources/overlays/`)
 
 Overlays add instructions to existing agents or the orchestrator without modifying their original definitions.
 
 ### File Naming
 
 ```
-overlays/{target-name}.overlay.md
+resources/overlays/{target-name}.overlay.md
 ```
 
 Where `{target-name}` is either:
@@ -134,12 +142,14 @@ Overlays are applied via the `before_agent_start` event. The behavior depends on
 
 This follows Gentle Pi's established pattern (see `lib/append-system-prompt.ts`).
 
-## 4. Skills (`skills/`)
+The extension loads overlays via `loadBundledOverlays()` and applies them in `before_agent_start`.
+
+## 4. Skills (`resources/skills/`)
 
 Skills follow the Gentle AI skill format with required sections:
 
 ```
-skills/{skill-name}/
+resources/skills/{skill-name}/
 ├── SKILL.md
 ├── assets/       # optional
 └── references/   # optional
@@ -154,39 +164,18 @@ skills/{skill-name}/
 5. **Output Contract** - What the agent should produce
 6. **References** - Local file paths
 
-## 5. Installation Profiles
+### Discovery
 
-The project supports multiple installation targets:
+Skills are registered via `pi.skills: ["resources/skills/*"]` in `package.json`. The extension auto-refreshes the skill registry on `session_start`.
 
-| Profile | Agent Home | Use Case |
-|---------|------------|----------|
-| `pi` | `~/.pi/agent` | Standard Pi installation |
-| `gentle-shell` | `~/.local/share/gentle-shell/agent` | Isolated Gentle Shell |
-| `gentle-shell-linked` | `~/.pi/agent` | Gentle Shell with `--link` |
-
-## 6. Sync Behavior
-
-`sync.sh` performs:
-1. Detect declared features (agents, routing, overlays, skills, mcp)
-2. Validate metadata and files
-3. Resolve native agent/skill paths for the target profile
-4. Install/update only project-owned files
-5. Update skill registry via official mechanism
-6. Prepare orchestrator routing context
-7. Validate overlays, detect conflicts
-8. Update manifest
-9. Report issues requiring intervention
-
-Idempotent: repeated runs with same config produce no changes.
-
-## 7. MCP Server Definitions (`mcp/`)
+## 5. MCP Server Definitions (`resources/mcp/`) — Optional
 
 MCP servers are defined as JSON files in the `mcp/` directory. Each file defines one server.
 
 ### File Naming
 
 ```
-mcp/{server-name}.mcp.json
+resources/mcp/{server-name}.mcp.json
 ```
 
 ### Schema
@@ -239,9 +228,9 @@ mcp/{server-name}.mcp.json
 | `capabilities` | No | Declared: `tools`, `resources` |
 | `agentDependencies` | No | List of agent names that need this server |
 
-### Discovery
+### Discovery & Registration
 
-The extension discovers `*.mcp.json` files in `mcp/` on `session_start` and registers them via `pi.registerMcpServer()`.
+The extension discovers `*.mcp.json` files in `resources/mcp/` on `session_start` and registers them via `pi.registerMcpServer()`.
 
 ### Agent MCP Dependencies
 
@@ -256,28 +245,62 @@ mcpDependencies:
 ---
 ```
 
-The orchestrator overlay includes available MCP servers and their capabilities.
+The orchestrator overlay includes available MCP servers and their capabilities. The doctor command validates that declared dependencies exist.
 
-## 8. Manifest Format
+## 6. Extension Configuration
 
-`.manifest.json` tracks project-owned files:
+`extension.config.json` (optional) at package root:
 
 ```json
 {
-  "version": "1.0",
-  "managedPaths": {
-    "extensions": [".pi/extensions/gentle-agent-extensions.ts"],
-    "agents": [".pi/agents/custom-agent.md"],
-    "routing": [".pi/routing/custom-agent.md"],
-    "overlays": [".pi/overlays/orchestrator.overlay.md"],
-    "skills": ["skills/custom-skill/SKILL.md"],
-    "mcp": ["mcp/server.mcp.json"],
-    "scripts": ["scripts/sync.sh"],
-    "assets": []
+  "features": {
+    "autoSync": true,
+    "versionTracking": true
   },
-  "installProfiles": {
-    "pi": { "agentHome": "~/.pi/agent" },
-    "gentle-shell": { "agentHome": "~/.local/share/gentle-shell/agent" }
+  "validation": {
+    "requireLicense": true,
+    "allowUnknownTargets": true
+  },
+  "mcpDefaults": {
+    "timeout": 60,
+    "exposure": "codemode"
   }
 }
 ```
+
+## 7. Peer Dependencies
+
+Pinned in `package.json`:
+
+```json
+"peerDependencies": {
+  "@earendil-works/pi-coding-agent": "^1.5.0",
+  "@earendil-works/pi-agent-core": "^1.5.0",
+  "@earendil-works/pi-ai": "^1.5.0",
+  "@earendil-works/pi-tui": "^1.5.0",
+  "typebox": "^1.4.0"
+}
+```
+
+## 8. Testing
+
+```bash
+# Unit tests
+npx tsx tests/gentle-extensions.test.ts
+```
+
+Tests validate:
+- Package structure and resource presence
+- Frontmatter and required sections
+- Extension parsing utilities
+- Extension load without errors
+
+## 9. Publishing
+
+```bash
+npm version patch  # or minor/major
+git push origin main --tags
+npm publish --access public
+```
+
+The CI/CD workflow (`.github/workflows/ci-cd.yml`) runs tests, creates GitHub releases on version bump, and publishes to npm via Trusted Publishers (OIDC).

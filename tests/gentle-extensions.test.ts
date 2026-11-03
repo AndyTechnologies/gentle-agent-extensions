@@ -16,7 +16,6 @@ describe("gentle-agent-extensions package structure", () => {
 		assert.ok(existsSync(join(PROJECT_ROOT, "resources", "overlays")), "resources/overlays/ exists");
 		assert.ok(existsSync(join(PROJECT_ROOT, "resources", "routing")), "resources/routing/ exists");
 		assert.ok(existsSync(join(PROJECT_ROOT, "resources", "skills")), "resources/skills/ exists");
-		assert.ok(existsSync(join(PROJECT_ROOT, "resources", "mcp")), "resources/mcp/ exists");
 	});
 
 	test("extension entry point exists", () => {
@@ -179,6 +178,126 @@ describe("bundled resources validation", () => {
 		assert.ok(content.includes("agent: architecture-council"), "routes to architecture-council");
 		assert.ok(content.includes("delegation: subagent_run"), "uses subagent_run");
 	});
+
+	test("gentle-ui skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "gentle-ui", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: gentle-ui"), "correct name");
+		const sections = ["## Cuándo usar", "## Web UI", "## TUI (terminal)", "## Reglas generales"];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("#ea1889"), "references Gentle-AI magenta accent");
+		assert.ok(content.includes("Rose Pine"), "references Rose Pine TUI palette");
+	});
+
+	test("github-automation skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "github-automation", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: github-automation"), "correct name");
+		const sections = ["## Prerequisites", "## Tool Surface", "## Automation Workflows", "## Pitfalls", "## Quick Reference", "## Notes for ODD Integration"];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("gh CLI"), "references gh CLI");
+		assert.ok(content.includes("git"), "references git");
+		assert.ok(content.includes("No MCP servers"), "explicitly states no MCP servers");
+	});
+
+	test("grilling skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "grilling", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: grilling"), "correct name");
+		assert.ok(content.includes("50"), "references 50-question budget");
+		assert.ok(content.includes("disable-model-invocation: true"), "disabled for model invocation");
+	});
+
+	test("grill-me skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "grill-me", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: grill-me"), "correct name");
+		assert.ok(content.includes("disable-model-invocation: true"), "disabled for model invocation");
+		assert.ok(content.includes("grilling"), "references grilling skill");
+	});
+
+	test("red-suite-hygiene skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "red-suite-hygiene", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: red-suite-hygiene"), "correct name");
+		const sections = ["## Activation Contract", "## Hard Rules", "## Common Environmental Noise Patterns", "## Execution Steps", "## Output Contract", "## Project Adaptation", "## References"];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("tmpfs"), "references tmpfs cleanup");
+		assert.ok(content.includes("pkill"), "references process cleanup");
+	});
+
+	test("ui-design skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "ui-design", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: ui-design"), "correct name");
+		const sections = [
+			"## Activation Contract",
+			"## Hard Rules",
+			"## Decision Gates",
+			"## Execution Steps",
+			"## Output Contract",
+			"## References"
+		];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("gentle-ui"), "references gentle-ui skill");
+		assert.ok(content.includes("gentle-design"), "references gentle-design skill");
+	});
+
+	test("ui-ux-principles skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "ui-ux-principles", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: ui-ux-principles"), "correct name");
+		const sections = [
+			"## Activation Contract",
+			"## Hard Rules",
+			"## Decision Gates",
+			"## Execution Steps",
+			"## Output Contract",
+			"## References"
+		];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("WCAG 2.2"), "references WCAG 2.2");
+		assert.ok(content.includes("Nielsen"), "references Nielsen heuristics");
+		assert.ok(content.includes("HCD"), "references Human-Centered Design");
+	});
+
+	test("using-git-worktrees skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "using-git-worktrees", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: using-git-worktrees"), "correct name");
+		const sections = ["## Overview", "## Step 0", "## Step 1", "## Step 2", "## Step 3", "## Quick Reference", "## Common Rationalizations", "## Provenance"];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("git worktree"), "references git worktree");
+		assert.ok(content.includes(".worktrees"), "references .worktrees directory");
+	});
+
+	test("all new skills have SKILL.md", () => {
+		const newSkills = [
+			"gentle-ui",
+			"github-automation",
+			"grilling",
+			"grill-me",
+			"red-suite-hygiene",
+			"ui-design",
+			"ui-ux-principles",
+			"using-git-worktrees"
+		];
+		for (const skill of newSkills) {
+			assert.ok(existsSync(join(PROJECT_ROOT, "resources", "skills", skill, "SKILL.md")), `${skill} has SKILL.md`);
+		}
+	});
 });
 
 describe("extension parsing utilities", () => {
@@ -296,6 +415,7 @@ describe("extension load test", () => {
 		assert.ok(content.includes("discoverBundledAgents"), "has discoverBundledAgents");
 		assert.ok(content.includes("loadBundledOverlays"), "has loadBundledOverlays");
 		assert.ok(content.includes("loadBundledMcpServers"), "has loadBundledMcpServers");
+		assert.ok(content.includes("loadBundledRouting"), "has loadBundledRouting");
 		assert.ok(content.includes("copyBundledAgentsToProject"), "has copyBundledAgentsToProject");
 		assert.ok(content.includes("registerBundledMcpServers"), "has registerBundledMcpServers");
 		assert.ok(content.includes("applyOverlay"), "has applyOverlay with mode support");

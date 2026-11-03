@@ -49,7 +49,15 @@ interface McpServerDefinition {
 	agentDependencies?: string[];
 }
 
+interface RoutingDefinition {
+	agent: string;
+	triggers: string[];
+	conditions: string[];
+	delegation: "subagent_run" | "subagent_run_background";
+}
+
 interface ProjectState {
+	routing: Map<string, RoutingDefinition>;
 	overlays: Map<string, OverlayDefinition[]>;
 	agents: Set<string>;
 	mcpServers: Map<string, McpServerDefinition>;
@@ -57,6 +65,7 @@ interface ProjectState {
 }
 
 const projectState: ProjectState = {
+	routing: new Map(),
 	overlays: new Map(),
 	agents: new Set(),
 	mcpServers: new Map(),
@@ -158,6 +167,56 @@ function loadBundledMcpServers(): Map<string, McpServerDefinition> {
 	return servers;
 }
 
+
+function loadBundledRouting(): Map<string, RoutingDefinition> {
+	const routing = new Map<string, RoutingDefinition>();
+
+	if (!existsSync(BUNDLED.routing)) return routing;
+
+	for (const file of readdirSync(BUNDLED.routing)) {
+		if (!file.endsWith(".md")) continue;
+
+		const filePath = join(BUNDLED.routing, file);
+		const content = readFileSync(filePath, "utf8");
+
+		const frontmatterMatch = /^---?
+([sS]*?)?
+---?
+([sS]*)$/.exec(content);
+		if (!frontmatterMatch) continue;
+
+		const [, fm] = frontmatterMatch;
+		const agentMatch = /agent:s*([^
+]+)/.exec(fm);
+		const triggersMatch = /triggers:s*[([^]]*)]/.exec(fm);
+		const conditionsMatch = /conditions:s*[([^]]*)]/.exec(fm);
+		const delegationMatch = /delegation:s*([^
+]+)/.exec(fm);
+
+		if (!agentMatch) continue;
+
+		const agent = agentMatch[1].trim();
+		const triggers = triggersMatch ? triggersMatch[1].split(",").map(t => t.trim().replace(/["']/g, "")) : [];
+		const conditions = conditionsMatch ? conditionsMatch[1].split(",").map(c => c.trim().replace(/["']/g, "")) : [];
+		const delegation = (delegationMatch ? delegationMatch[1].trim() : "subagent_run") as "subagent_run" | "subagent_run_background";
+
+		if (!["subagent_run", "subagent_run_background"].includes(delegation)) {
+			console.warn(`[${EXTENSION_NAME}] Unknown delegation '${delegation}' for ${file}, defaulting to 'subagent_run'`);
+		}
+
+		const route: RoutingDefinition = {
+			agent,
+			triggers,
+			conditions,
+			delegation,
+		};
+
+		routing.set(agent, route);
+	}
+
+	return routing;
+}
+
 function appendSystemPromptOnce(options: { appendSystemPrompt?: string; systemPrompt?: string } | null | undefined, text: string): void {
 	const normalized = text.replace(/^\n+/, "");
 	if (!options || !normalized) return;
@@ -213,6 +272,7 @@ function initializeBundledState(): void {
 	projectState.agents = new Set(discoverBundledAgents());
 	projectState.overlays = loadBundledOverlays();
 	projectState.mcpServers = loadBundledMcpServers();
+	projectState.routing = loadBundledRouting();
 	projectState.initialized = true;
 }
 
@@ -248,6 +308,35 @@ async function copyBundledAgentsToProject(cwd: string): Promise<void> {
 function registerBundledMcpServers(ctx: ExtensionContext): void {
 	for (const [name, server] of projectState.mcpServers) {
 		if (server.enabled === false) continue;
+
+		// Install MCP server if install config present
+		if (server.install) {
+			try {
+				ctx.ui.notify(`[${EXTENSION_NAME}] Installing MCP server ${name} via ${server.install.manager}...`, "info");
+				const { spawnSync } = await import("node:child_process");
+				const args: string[] = [];
+				if (server.install.manager === "npm") {
+					args.push("install", "-g", `${server.install.package}@${server.install.version}`);
+				} else if (server.install.manager === "npx") {
+					/* npx runs on-demand */ 
+				} else if (server.install.manager === "uv") {
+					args.push("tool", "install", `${server.install.package}==${server.install.version}`);
+				} else if (server.install.manager === "pip") {
+					args.push("install", `${server.install.package}==${server.install.version}`);
+				} else if (server.install.manager === "cargo") {
+					args.push("install", `${server.install.package}`, "--version", server.install.version);
+				}
+				if (args.length > 0) {
+					const { spawnSync } = await import("node:child_process");
+					const result = spawnSync(server.install.manager, args, { stdio: "inherit", shell: true });
+					if (result.status !== 0) {
+						ctx.ui.notify(`[${EXTENSION_NAME}] Warning: MCP server ${name} install failed (exit ${result.status})`, "warning");
+					}
+				}
+			} catch (e) {
+				ctx.ui.notify(`[${EXTENSION_NAME}] Warning: MCP server ${name} install error: ${e}`, "warning");
+			}
+		}
 
 		const config: Record<string, unknown> = {
 			description: server.description,
@@ -293,6 +382,134 @@ function applyOverlay(overlay: OverlayDefinition, targetName: string, options: {
 	}
 }
 
+
+interface McpHandshakeResult {
+	ok: boolean;
+	error?: string;
+}
+
+async function performMcpHandshake(child: import("node:child_process").ChildProcess, serverName: string, server: McpServerDefinition): Promise<McpHandshakeResult> {
+	return new Promise((resolve) => {
+		const timeout = setTimeout(() => {
+			child.kill();
+			resolve({ ok: false, error: "handshake timeout (5s)" });
+		}, 5000);
+
+		let buffer = "";
+		let initializedSent = false;
+
+		child.stdout?.on("data", (data: Buffer) => {
+			buffer += data.toString();
+			const lines = buffer.split("\n");
+			buffer = lines.pop() || "";
+
+			for (const line of lines) {
+				if (!line.trim()) continue;
+				try {
+					const msg = JSON.parse(line);
+					
+					// Handle initialize response
+					if (msg.id === 1 && msg.result) {
+						// Send initialized notification
+						const initializedMsg = JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" });
+						child.stdin?.write(initializedMsg + "\n");
+						initializedSent = true;
+					}
+					
+					// Handle tools/list response
+					if (msg.id === 2 && msg.result && msg.result.tools) {
+						clearTimeout(timeout);
+						child.kill();
+						resolve({ ok: true });
+					}
+					
+					// Handle errors
+					if (msg.error) {
+						clearTimeout(timeout);
+						child.kill();
+						resolve({ ok: false, error: `MCP error: ${msg.error.message || JSON.stringify(msg.error)}` });
+					}
+				} catch {
+					// Ignore parse errors
+				}
+			}
+		});
+
+		child.on("error", (err) => {
+			clearTimeout(timeout);
+			resolve({ ok: false, error: `process error: ${err.message}` });
+		});
+
+		child.on("exit", (code) => {
+			clearTimeout(timeout);
+			if (code !== 0 && code !== null) {
+				resolve({ ok: false, error: `exited with code ${code}` });
+			}
+		});
+
+		// Send initialize request
+		const initMsg = JSON.stringify({
+			jsonrpc: "2.0",
+			id: 1,
+			method: "initialize",
+			params: {
+				protocolVersion: "2024-11-05",
+				capabilities: {},
+				clientInfo: { name: "gentle-agent-extensions-doctor", version: "1.0.0" }
+			}
+		});
+		child.stdin?.write(initMsg + "\n");
+
+		// Wait a bit then send tools/list
+		setTimeout(() => {
+			if (initializedSent) {
+				const toolsMsg = JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+				child.stdin?.write(toolsMsg + "\n");
+			}
+		}, 500);
+	});
+}
+
+async function performHttpMcpHandshake(server: McpServerDefinition): Promise<McpHandshakeResult> {
+	try {
+		const response = await fetch(server.url!, { 
+			method: "POST", 
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				jsonrpc: "2.0",
+				id: 1,
+				method: "initialize",
+				params: {
+					protocolVersion: "2024-11-05",
+					capabilities: {},
+					clientInfo: { name: "gentle-agent-extensions-doctor", version: "1.0.0" }
+				}
+			}),
+			signal: AbortSignal.timeout(5000)
+		});
+		
+		if (!response.ok) {
+			return { ok: false, error: `HTTP ${response.status}` };
+		}
+		
+		const data = await response.json();
+		if (data.error) {
+			return { ok: false, error: `MCP error: ${data.error.message || JSON.stringify(data.error)}` };
+		}
+		
+		await fetch(server.url!, {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
+			signal: AbortSignal.timeout(2000)
+		}).catch(() => {});
+		
+		return { ok: true };
+	} catch (e) {
+		return { ok: false, error: e instanceof Error ? e.message : String(e) };
+	}
+}
+
 async function runDoctorChecks(cwd: string, env: NodeJS.ProcessEnv, includeMcpHealth = false): Promise<{ issues: string[]; warnings: string[] }> {
 	const issues: string[] = [];
 	const warnings: string[] = [];
@@ -324,17 +541,33 @@ async function runDoctorChecks(cwd: string, env: NodeJS.ProcessEnv, includeMcpHe
 		}
 	}
 
-	// Check bundled MCPs
+	// Check bundled MCPs - enhanced validation
 	if (existsSync(BUNDLED.mcp)) {
+		const seenNames = new Set<string>();
 		for (const file of readdirSync(BUNDLED.mcp)) {
 			if (!file.endsWith(".mcp.json")) continue;
 			try {
 				const config = JSON.parse(readFileSync(join(BUNDLED.mcp, file), "utf8"));
 				if (!config.name || !config.description || !config.transport) {
-					issues.push(`Bundled MCP ${file}: missing required fields`);
+					issues.push(`Bundled MCP ${file}: missing required fields (name, description, transport)`);
+				}
+				if (config.name) {
+					if (seenNames.has(config.name)) {
+						issues.push(`Bundled MCP ${file}: duplicate name '${config.name}'`);
+					}
+					seenNames.add(config.name);
+				}
+				if (config.transport !== "stdio" && config.transport !== "http") {
+					issues.push(`Bundled MCP ${file}: invalid transport '${config.transport}' (must be stdio or http)`);
 				}
 				if (config.transport === "stdio" && !config.command) issues.push(`Bundled MCP ${file}: stdio missing command`);
 				if (config.transport === "http" && !config.url) issues.push(`Bundled MCP ${file}: http missing url`);
+				if (config.exposure && !["codemode", "direct", "deferred", "hidden"].includes(config.exposure)) {
+					issues.push(`Bundled MCP ${file}: invalid exposure '${config.exposure}'`);
+				}
+				if (config.auth && !["oauth", "bearer", "none"].includes(config.auth.type)) {
+					issues.push(`Bundled MCP ${file}: invalid auth type '${config.auth.type}'`);
+				}
 			} catch {
 				issues.push(`Bundled MCP ${file}: invalid JSON`);
 			}
@@ -355,40 +588,62 @@ async function runDoctorChecks(cwd: string, env: NodeJS.ProcessEnv, includeMcpHe
 	}
 	if (!extensionInstalled) {
 		issues.push("Extension not installed (run: pi install npm:gentle-agent-extensions or pi install git:...)");
+
+	// Check agent MCP dependencies
+	if (existsSync(BUNDLED.agents)) {
+		for (const file of readdirSync(BUNDLED.agents)) {
+			if (!file.endsWith(".md")) continue;
+			try {
+				const content = readFileSync(join(BUNDLED.agents, file), "utf8");
+				const frontmatterMatch = /^---?
+([sS]*?)?
+---?
+([sS]*)$/.exec(content);
+				if (!frontmatterMatch) continue;
+				const [, fm] = frontmatterMatch;
+				const mcpDepMatch = /mcpDependencies:s*[([^]]*)]/.exec(fm);
+				if (mcpDepMatch) {
+					const deps = mcpDepMatch[1].split(",").map(d => d.trim().replace(/[']/g, ""));
+					for (const dep of deps) {
+						if (dep && !projectState.mcpServers.has(dep)) {
+							warnings.push(`Agent ${file}: declares MCP dependency '${dep}' but no bundled MCP server with that name exists`);
+						}
+					}
+				}
+			} catch {
+				// ignore
+			}
+		}
+	}
 	}
 
-	// MCP Health Check
+	}
 	if (includeMcpHealth) {
 		for (const [name, server] of projectState.mcpServers) {
 			if (server.enabled === false) continue;
+			
 			if (server.transport === "stdio") {
 				try {
 					const { spawn } = await import("node:child_process");
-					const child = spawn(server.command!, server.args || [], { stdio: "ignore" });
-					await new Promise<void>((resolve, reject) => {
-						const timer = setTimeout(() => {
-							child.kill();
-							resolve();
-						}, 2000);
-						child.on("error", () => {
-							clearTimeout(timer);
-							reject(new Error("failed to start"));
-						});
-						child.on("exit", (code) => {
-							clearTimeout(timer);
-							if (code !== 0 && code !== null) reject(new Error(`exited with ${code}`));
-							else resolve();
-						});
+					const child = spawn(server.command!, server.args || [], { 
+						stdio: ["pipe", "pipe", "ignore"] 
 					});
-				} catch {
-					warnings.push(`MCP ${name}: stdio server failed to start`);
+					
+					const result = await performMcpHandshake(child, name, server);
+					if (!result.ok) {
+						warnings.push(`MCP ${name}: ${result.error}`);
+					}
+				} catch (e) {
+					warnings.push(`MCP ${name}: stdio server error - ${e instanceof Error ? e.message : String(e)}`);
 				}
 			} else if (server.transport === "http") {
 				try {
-					const response = await fetch(server.url!, { method: "HEAD", signal: AbortSignal.timeout(5000) });
-					if (!response.ok) warnings.push(`MCP ${name}: HTTP ${response.status} at ${server.url}`);
-				} catch {
-					warnings.push(`MCP ${name}: HTTP server not reachable at ${server.url}`);
+					const result = await performHttpMcpHandshake(server);
+					if (!result.ok) {
+						warnings.push(`MCP ${name}: ${result.error}`);
+					}
+				} catch (e) {
+					warnings.push(`MCP ${name}: HTTP server error - ${e instanceof Error ? e.message : String(e)}`);
 				}
 			}
 		}
@@ -537,6 +792,7 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 				try { ctx.api.unregisterMcpServer(name); } catch {}
 			}
 			projectState.mcpServers = loadBundledMcpServers();
+	projectState.routing = loadBundledRouting();
 			registerBundledMcpServers(ctx);
 			ctx.ui.notify("MCP servers reloaded from bundled resources", "info");
 		},
