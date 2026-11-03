@@ -30,7 +30,7 @@ metadata:
 |------|-------------|
 | **Pre-planning gate** | Runs BEFORE task planning; gaps must be resolved or explicitly accepted as assumptions |
 | **Documents in ODD tasks.md** | Decisions go under `## Product Contract` in the ODD task document |
-| **Orchestrator owns questions via grill-me** | Only orchestrator asks user, **using the `grill-me` skill** (bounded 50-question interview); Quest formulates questions |
+| **Orchestrator owns questions via quest-interview** | Only orchestrator asks user, **using the internal `quest-interview` procedure** (bounded 50-question interview); Quest formulates questions |
 | **Stable clause IDs** | Product clauses use `PC-01`, `PC-02`, etc. |
 | **Gap detection is continuous** | Re-scan for gaps when requirements change or new info emerges |
 | **No silent assumptions** | Every unresolved gap is either resolved, documented as assumption, or escalated |
@@ -66,7 +66,7 @@ metadata:
 | Situation | Action |
 |-----------|--------|
 | No product gaps detected | Document "No product gaps identified"; proceed to planning |
-| Blocking gap (prevents safe planning) | Formulate concrete question; **invoke `grill-me` skill** for bounded interview; STOP and wait for user |
+| Blocking gap (prevents safe planning) | Formulate concrete question; **invoke internal `quest-interview`** for bounded interview; STOP and wait for user |
 | Assumable gap (reversible) | State explicit hypothesis with rationale; document as `reversible_hypothesis` |
 | Non-blocking gap (convention) | Apply existing convention; document as `convention` |
 | Multiple independent blocking gaps | Resolve one at a time via separate `grill-me` sessions or batch in minimal interactions |
@@ -88,7 +88,7 @@ metadata:
 
 6. **For each `blocking` gap**:
    - Formulate concrete question with alternatives and consequences
-   - **Invoke `grill-me` skill** for bounded interview (max 50 questions, decision-tree discipline)
+   - **Invoke internal `quest-interview`** for bounded interview (max 50 questions, decision-tree discipline)
    - Record answer as `explicit_answer` with verbatim user response
    - Update clause state to `accepted`
 
@@ -193,7 +193,6 @@ Upon completion, the orchestrator has:
 
 - Architecture Quest: `architecture-quest` skill
 - ODD Workflow: `gentle-ai` skill (Task Size, Track, Delegation)
-- `grill-me` skill — User-invoked bounded interview entry point
-- `grilling` skill — Bounded interview primitive (50-question budget, decision tree)
+- `quest-interview` — Internal bounded interview procedure (50-question budget, decision tree)
 - Keep a Changelog: https://keepachangelog.com/
 - Semantic Versioning: https://semver.org/

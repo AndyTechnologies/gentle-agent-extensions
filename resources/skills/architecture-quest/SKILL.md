@@ -129,7 +129,7 @@ Architectural: Repository, Unit of Work, Anti-Corruption Layer, Circuit Breaker,
 | Rule | Description |
 |------|-------------|
 | **No mandatory full quest** | Quest activates proportionally to uncertainty and consequence. No full investigation for local/trivial changes. |
-| **Orchestrator owns user questions via grill-me** | Only the orchestrator may ask the user, **using the `grill-me` skill** (bounded 50-question interview). Subagents (including Council) never ask directly. |
+| **Orchestrator owns user questions via quest-interview** | Only the orchestrator may ask the user, using the internal `quest-interview` procedure (bounded 50-question interview). The `grill-me` skill is user-invoked only and MUST NOT be invoked automatically. Subagents (including Council) never ask directly. |
 | **Contract in ODD document** | Architectural contract lives in the ODD task document (`odd/tasks/<feature>.md`) under `## Architectural Contract`. No global contract registry. |
 | **Stable clause IDs** | Contract clauses use stable identifiers: `AC-01`, `AC-02`, etc. |
 | **Verifiable criteria** | Every clause must have observable acceptance criteria and expected evidence. |
@@ -144,8 +144,8 @@ Architectural: Repository, Unit of Work, Anti-Corruption Layer, Circuit Breaker,
 |-----------|--------|
 | Task has no architectural impact | Skip Quest; proceed inline |
 | Uncertainty exists but consequence low | Classify as `assumable` or `non-blocking`; use reversible hypothesis |
-| Uncertainty is blocking (changes design/data/security/contracts) | Formulate concrete question; **invoke `grill-me` skill** for bounded interview; stop and wait for user |
-| Multiple independent blocking decisions | Resolve one at a time via separate `grill-me` sessions or batch in minimal interactions |
+| Uncertainty is blocking (changes design/data/security/contracts) | Formulate concrete question; **invoke internal `quest-interview`** for bounded interview; stop and wait for user |
+| Multiple independent blocking decisions | Resolve one at a time via separate `quest-interview` sessions or batch in minimal interactions |
 | Decision can be deduced from requirements + conventions | Document as accepted with provenance `convention` or `existing decision` |
 | Requirements change after contract accepted | Update affected clauses; mark replaced decisions; don't rewrite history |
 
@@ -172,7 +172,7 @@ Architectural: Repository, Unit of Work, Anti-Corruption Layer, Circuit Breaker,
      - **Non-blocking**: resolvable via existing conventions
 
 5. **Resolve gaps proportionally**
-   - For `blocking` gaps: formulate concrete question(s) and **invoke `grill-me` skill** for a bounded interview (max 50 questions). The orchestrator runs the interview via the `grilling` primitive. Explain decision, relevant alternatives, and main consequences.
+   - For `blocking` gaps: formulate concrete question(s) and **invoke internal `quest-interview`** for a bounded interview (max 50 questions). The orchestrator runs the interview via the `grilling` primitive internally. Explain decision, relevant alternatives, and main consequences.
    - For `assumable` gaps: state explicit reversible hypothesis with rationale.
    - For `non-blocking` gaps: apply existing conventions.
 
@@ -235,6 +235,5 @@ Upon completion, the orchestrator has:
 - `orchestrator-verification.md` — Verification rule, tier table, assess/escalate
 - `rdd-defect-workflow/SKILL.md` — RDD integration, candidate freeze, review authority
 - `gentle-ai/SKILL.md` — Harness discipline, Work Routing, Review Lens Selection
-- `grill-me` skill — User-invoked bounded interview entry point
-- `grilling` skill — Bounded interview primitive (50-question budget, decision tree)
+- `quest-interview` — Internal bounded interview procedure (50-question budget, decision tree)
 - External references listed in Knowledge Base (verified at load time)

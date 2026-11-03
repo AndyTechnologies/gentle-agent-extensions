@@ -67,7 +67,8 @@ metadata:
 | Only fixes | Propose PATCH |
 | Mixed breaking + features | Propose MAJOR and MINOR (explain both) |
 | User requests specific bump | Honor if valid; warn if mismatch |
-| RDD not enabled / failed | Still generate changelog; note RDD status |
+| RDD not enabled | Generate changelog; note RDD disabled |
+| RDD failed | Do NOT generate changelog; wait for RDD resolution |
 
 ## Execution Steps
 

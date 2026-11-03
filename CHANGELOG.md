@@ -4,6 +4,59 @@ All notable changes to `gentle-agent-extensions` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.4] - 2026-11-03
+
+### Fixed
+- **Extension load** — `registerBundledMcpServers()` now `async`; fixes `await import()` in sync function
+- **Routing loader** — `loadBundledRouting()` now parses YAML list format (`triggers:
+  - "item"`) instead of comma-separated inline
+- **Agent sync** — `copyBundledAgentsToProject()` detects user-modified files (hash comparison); no longer overwrites local customizations; `conflicts` command shows differences
+- **MCP lifecycle** — Registration separated from installation; `mcp-install` command requires explicit user authorization; allow-list of managers (npm, uv, pip, cargo); no `shell: true`
+- **MCP handshake** — Retry logic with backoff; passes `server.env` and `server.cwd`; protocol version 2025-06-18
+- **mcp-reload** — Only unregisters extension-owned servers (tracks bundled names)
+- **mcp-health** — Returns `NO_SERVERS_CONFIGURED` when no servers configured
+- **Routing consumption** — `before_agent_start` evaluates triggers and injects delegation instructions to orchestrator
+- **Syntax** — Removed extra closing braces in `runDoctorChecks()`
+
+### Changed
+- **Quest → Interview** — Architecture Quest & Product Quest now use internal `quest-interview` (bounded 50-question interview via `grilling` primitive); `grill-me` / `grilling` remain user-invoked only (`disable-model-invocation: true`)
+- **red-suite-hygiene** — Execution-scoped cleanup (`EXEC_ID` prefix); preview before delete; fixed `pkill` usage
+- **using-git-worktrees** — Requires authorization before committing `.gitignore` changes
+- **changelog-generator` — RDD failed → do NOT generate changelog; RDD disabled → generate with note
+- **ui-design` — `gentle-design` reference marked as external (gentle-pi package)
+
+### Added
+- **Commands** — `mcp-install <server>`, `mcp-status` (shows available/disabled/failed/not_installed)
+- **Conflict detection** — `gentle-extensions:conflicts` shows user-modified vs bundled
+- **MCP status tracking** — `mcp-status` shows available/disabled/failed/not_installed
+
+### Skills Updated
+- `architecture-quest`, `product-quest`: use internal `quest-interview` instead of `grill-me`
+- `red-suite-hygiene`: execution-scoped cleanup, fixed `pkill`
+- `using-git-worktrees`: requires authorization for `.gitignore` commit
+- `changelog-generator`: RDD failed blocks generation
+- `ui-design`: `gentle-design` marked as external dependency
+
+## [1.3.3] - 2026-11-03
+
+### Fixed
+- **CI/CD workflow** — Fixed invalid YAML (`env:` section with only comments) that prevented workflow execution
+- **npm publish** — Trusted Publishers (OIDC) now works correctly; no token needed, 2FA does not block
+
+## [1.3.2] - 2026-11-03
+
+### Added
+- **Routing loader** — `loadBundledRouting()` + `RoutingDefinition` interface; loads routing files on init
+- **MCP Health Check** — Proper MCP protocol handshake (`initialize` → `notifications/initialized` → `tools/list`) for stdio/HTTP
+- **MCP Install** — Auto-install via `install.manager` (npm, uv, pip, cargo, npx) before register
+- **MCP Validation** — Duplicate names, transport values, exposure, auth types
+- **Agent MCP Dependencies** — Doctor warns if agent declares missing MCP server
+- **Tests** — 30 tests pass; validation for 8 new skills; `npm test` runs real tests
+
+### Changed
+- **Documentation** — `conventions.md`, `.manifest.json`, `extension.config.json` updated to `resources/` structure
+- **Cleanup** — Removed unused `resources/mcp/` dir; updated `.engram/config.json`
+
 ## [1.3.1] - 2026-11-02
 
 ### Added

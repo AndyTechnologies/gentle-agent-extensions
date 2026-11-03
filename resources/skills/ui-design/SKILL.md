@@ -70,4 +70,4 @@ When using the `gentle-design` skill:
 
 - `gentle-ui` skill — Gentle AI direction: web (zinc/magenta) and TUI (Rose Pine) tokens, structure, general rules
 - `ui-ux-principles` skill — HCD, Nielsen heuristics, WCAG 2.2, evaluation methods
-- `gentle-design` skill — Design canvas, artboards, handoff
+- `gentle-design` skill — Design canvas, artboards, handoff (external: gentle-pi package)

@@ -48,9 +48,15 @@ If usage > 70% (space or inodes), sweep before anything else.
 # Common patterns — adapt to project:
 ls -d /tmp/test-* /tmp/suite-* /tmp/sandbox-* /tmp/red-* /tmp/opencode-* /tmp/vitest-* /tmp/jest-* /tmp/pytest-* /tmp/cargo-* 2>/dev/null
 ```
-**Remove only test harness dirs** (never user data):
+**Remove only test harness dirs owned by current execution** (never user data):
 ```bash
-rm -rf /tmp/test-* /tmp/suite-* /tmp/sandbox-* /tmp/red-* /tmp/opencode-* /tmp/vitest-* /tmp/jest-* /tmp/pytest-* /tmp/cargo-* 2>/dev/null
+# Use execution-specific prefix to avoid cross-session conflicts
+EXEC_ID="${RED_EXEC_ID:-$$}"
+rm -rf /tmp/test-${EXEC_ID}-* /tmp/suite-${EXEC_ID}-* /tmp/sandbox-${EXEC_ID}-* /tmp/red-${EXEC_ID}-* 2>/dev/null
+```
+**Preview before delete** (dry-run):
+```bash
+ls -d /tmp/test-${EXEC_ID}-* /tmp/suite-${EXEC_ID}-* /tmp/sandbox-${EXEC_ID}-* /tmp/red-${EXEC_ID}-* 2>/dev/null
 ```
 
 ### 3. Orphan process check
@@ -62,8 +68,8 @@ pgrep -af 'fake_api|mock_server|test_runner|chromedriver|playwright|vitest|jest'
 ```bash
 # Example: kill specific PIDs individually
 kill -9 <PID1> <PID2> ...
-# Or use pkill with exact cmdline match (safer than -f pattern):
-pkill -x "python.*fake_api.py"
+# Or use pkill with full command match (requires pgrep -f first):
+pgrep -f "python.*fake_api\.py" | xargs -r kill -9
 ```
 
 ### 4. Port / resource check

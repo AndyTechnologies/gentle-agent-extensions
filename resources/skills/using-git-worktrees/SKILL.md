@@ -88,7 +88,7 @@ Follow this priority order. Explicit user preference always beats observed files
 git check-ignore -q .worktrees 2>/dev/null || git check-ignore -q worktrees 2>/dev/null
 ```
 
-**If NOT ignored:** Add to .gitignore, commit the change, then proceed.
+**If NOT ignored:** Add to .gitignore, **ask for authorization before committing**, then proceed.
 
 **Why critical:** Prevents accidentally committing worktree contents to repository.
 
