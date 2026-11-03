@@ -44,7 +44,7 @@ describe("gentle-agent-extensions package structure", () => {
 		assert.ok(pkg.pi?.skills?.includes("resources/skills/*"), "pi.skills includes resources/skills/*");
 		assert.ok(pkg.files?.includes("src/"), "files includes src/");
 		assert.ok(pkg.files?.includes("resources/"), "files includes resources/");
-		assert.ok(pkg.peerDependencies?.["@earendil-works/pi-coding-agent"]?.startsWith("^1.4.0"), "peerDependencies pinned to ^1.4.0");
+		assert.ok(pkg.peerDependencies?.["@earendil-works/pi-coding-agent"]?.startsWith("^1.5.0"), "peerDependencies pinned to ^1.5.0");
 	});
 
 	test("bundled agents exist", () => {
@@ -66,8 +66,12 @@ describe("gentle-agent-extensions package structure", () => {
 			.map(d => d.name);
 		assert.ok(dirs.includes("architecture-quest"), "has architecture-quest skill");
 		assert.ok(dirs.includes("gentle-agent-extension"), "has gentle-agent-extension skill");
+		assert.ok(dirs.includes("changelog-generator"), "has changelog-generator skill");
+		assert.ok(dirs.includes("product-quest"), "has product-quest skill");
 		assert.ok(existsSync(join(skillsDir, "architecture-quest", "SKILL.md")), "architecture-quest has SKILL.md");
 		assert.ok(existsSync(join(skillsDir, "gentle-agent-extension", "SKILL.md")), "gentle-agent-extension has SKILL.md");
+		assert.ok(existsSync(join(skillsDir, "changelog-generator", "SKILL.md")), "changelog-generator has SKILL.md");
+		assert.ok(existsSync(join(skillsDir, "product-quest", "SKILL.md")), "product-quest has SKILL.md");
 	});
 
 	test("bundled routing exists", () => {
@@ -128,6 +132,46 @@ describe("bundled resources validation", () => {
 		for (const section of sections) {
 			assert.ok(content.includes(section), `has section: ${section}`);
 		}
+	});
+
+	test("changelog-generator skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "changelog-generator", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: changelog-generator"), "correct name");
+		const sections = [
+			"## Activation Contract",
+			"## Hard Rules",
+			"## Decision Gates",
+			"## Execution Steps",
+			"## Output Contract",
+			"## References"
+		];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("SemVer"), "references Semantic Versioning");
+		assert.ok(content.includes("Keep a Changelog"), "references Keep a Changelog");
+		assert.ok(content.includes("VERSION PROPOSALS"), "has version proposal format");
+	});
+
+	test("product-quest skill is valid", () => {
+		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "product-quest", "SKILL.md"), "utf8");
+		assert.ok(content.startsWith("---"), "has frontmatter");
+		assert.ok(content.includes("name: product-quest"), "correct name");
+		const sections = [
+			"## Activation Contract",
+			"## Hard Rules",
+			"## Decision Gates",
+			"## Execution Steps",
+			"## Output Contract",
+			"## References"
+		];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
+		assert.ok(content.includes("## Product Contract"), "has Product Contract format");
+		assert.ok(content.includes("PC-01"), "uses PC-XX clause IDs");
+		assert.ok(content.includes("Cross-refs"), "has cross-references to Architecture Quest");
 	});
 
 	test("routing references correct agent", () => {

@@ -1,16 +1,35 @@
 # gentle-agent-extensions
 
-**Bundled extensions for Gentle Shell** — Install once, get architecture-quest, architecture-council, orchestrator overlay, and gentle-agent-extension skill automatically. No configuration needed.
+**Bundled extensions for Gentle Shell** — Install once, get architecture-quest, architecture-council, orchestrator overlay, and 12 skills automatically. No configuration needed.
 
 ## What This Package Provides
 
 | Resource | Description |
 |----------|-------------|
 | **architecture-council** agent | Read-only contractual verifier for Architecture Quest contracts |
-| **architecture-quest** skill | Explores architectural needs, identifies gaps, produces verifiable contracts |
+| **architecture-quest** skill | Explores architectural needs, identifies gaps, produces verifiable contracts; wired to `grill-me` for user questions |
 | **gentle-agent-extension** skill | Teaches how to extend this package (for maintainers) |
-| **orchestrator.overlay.md** | Integrates Quest + Council into ODD workflow before RDD review |
+| **orchestrator.overlay.md** | Integrates Quest, Product Quest, Council, Changelog Generator into ODD workflow before RDD review |
 | **architecture-council routing** | Semantic delegation rules for the council agent |
+
+### Skills (12 total)
+
+| Skill | Trigger | Purpose |
+|-------|---------|---------|
+| `architecture-quest` | architecture quest, architectural exploration, design decision | Architectural exploration + contract; blocking gaps → `grill-me` |
+| `product-quest` | product quest, product decisions, domain decisions, feature scope | Product/domain decisions in ODD; blocking gaps → `grill-me` |
+| `changelog-generator` | changelog, release notes, semver, version bump | Post-ODD/RDD changelog + SemVer proposals (min 2 options) |
+| `gentle-ui` | gentle-ai, Gentle-AI, diseño gentle, UI web, desktop, TUI | Gentle-AI design system: zinc/magenta (web), Rose Pine (TUI) |
+| `github-automation` | GitHub automation, repos, issues, PRs, Actions, code search | `gh` CLI + `git` via bash (no MCP, no tokens) |
+| `grilling` | grill, stress-test thinking | Bounded interview primitive (50 questions, decision tree) |
+| `grill-me` | /grill-me, grill me | User-invoked entry point for grilling sessions |
+| `red-suite-hygiene` | RED checks, test failures, tmpfs full, orphan processes | Clean test env before diagnosing failures (generic, not SDD-specific) |
+| `ui-design` | UI/UX design, components, design system, accessibility | UI decisions checklist; records in design artifact |
+| `ui-ux-principles` | UI/UX principles, Nielsen, WCAG, HCD, usability | HCD, heuristics, WCAG 2.2, metrics, AI agent evaluation |
+| `using-git-worktrees` | git worktrees, isolated workspace | Isolated workspace via native tools or git worktree fallback |
+| `gentle-agent-extension` | extend gentle-ai, add agent, add overlay | Package maintainer guide |
+
+---
 
 ## What This Package Does NOT Do
 
@@ -30,7 +49,7 @@ pi install npm:gentle-agent-extensions@latest
 
 ### From Git
 ```bash
-pi install git:github.com/AndyTechnologies/gentle-agent-extensions@v1.2.0
+pi install git:github.com/AndyTechnologies/gentle-agent-extensions@v1.3.0
 ```
 
 ### Local development
@@ -74,13 +93,29 @@ When you open Pi, the extension:
 
 # Architecture Quest - explore architectural decisions
 "Run architecture quest for this feature"
+
+# Product Quest - explore product/domain decisions
+"Run product quest for this feature"
+
+# Changelog Generator - generate changelog + version proposals
+"Generate changelog for this release"
 ```
 
 ### Skills
 
 Skills are auto-available via `/skill-registry:refresh`:
 - `architecture-quest` — Architectural exploration
-- `gentle-agent-extension` — Package maintainer guide
+- `product-quest` — Product/domain decisions
+- `changelog-generator` — Changelog + SemVer
+- `gentle-ui` — Gentle-AI design system
+- `github-automation` — GitHub ops via gh/git
+- `grilling` — Bounded interview primitive
+- `grill-me` — User-invoked grilling entry
+- `red-suite-hygiene` — Test suite hygiene
+- `ui-design` — UI/UX decisions
+- `ui-ux-principles` — HCD, Nielsen, WCAG
+- `using-git-worktrees` — Isolated worktrees
+- `gentle-agent-extension` — Maintainer guide
 
 ---
 
@@ -94,6 +129,16 @@ Skills are auto-available via `/skill-registry:refresh`:
 │   ├── overlays/orchestrator.overlay.md                 ← Bundled overlay
 │   ├── skills/
 │   │   ├── architecture-quest/SKILL.md                  ← Bundled skill
+│   │   ├── product-quest/SKILL.md                       ← Bundled skill
+│   │   ├── changelog-generator/SKILL.md                 ← Bundled skill
+│   │   ├── gentle-ui/SKILL.md                           ← Bundled skill
+│   │   ├── github-automation/SKILL.md                   ← Bundled skill
+│   │   ├── grilling/SKILL.md                            ← Bundled skill
+│   │   ├── grill-me/SKILL.md                            ← Bundled skill
+│   │   ├── red-suite-hygiene/SKILL.md                   ← Bundled skill
+│   │   ├── ui-design/SKILL.md                           ← Bundled skill
+│   │   ├── ui-ux-principles/SKILL.md                    ← Bundled skill
+│   │   ├── using-git-worktrees/SKILL.md                 ← Bundled skill
 │   │   └── gentle-agent-extension/SKILL.md              ← Bundled skill
 │   ├── routing/architecture-council.md                  ← Bundled routing
 │   └── mcp/                                             ← Bundled MCPs (future)
@@ -246,15 +291,15 @@ Override defaults in the package root:
 
 ### Peer Dependencies
 
-Pinned to Pi 1.4.0 compatible versions:
+Pinned to Pi 1.5.0 compatible versions:
 
 ```json
 "peerDependencies": {
-  "@earendil-works/pi-coding-agent": "^1.4.0",
-  "@earendil-works/pi-agent-core": "^1.4.0",
-  "@earendil-works/pi-ai": "^1.4.0",
-  "@earendil-works/pi-tui": "^1.4.0",
-  "typebox": "^0.30.0"
+  "@earendil-works/pi-coding-agent": "^1.5.0",
+  "@earendil-works/pi-agent-core": "^1.5.0",
+  "@earendil-works/pi-ai": "^1.5.0",
+  "@earendil-works/pi-tui": "^1.5.0",
+  "typebox": "^1.4.0"
 }
 ```
 
@@ -266,7 +311,7 @@ Pinned to Pi 1.4.0 compatible versions:
 
 ```bash
 # Unit tests (fast)
-node --test tests/gentle-extensions.test.ts
+npx tsx tests/gentle-extensions.test.ts
 
 # Integration tests (slow, spawns Pi)
 node --test tests/integration.test.ts
@@ -284,7 +329,7 @@ pi -e ./src/extension.ts
 
 ## Compatibility
 
-- Pi 1.4.0+
+- Pi 1.5.0+
 - gentle-pi 4.5.1+ (bundled in Gentle Shell)
 - gentle-ai (bundled)
 
