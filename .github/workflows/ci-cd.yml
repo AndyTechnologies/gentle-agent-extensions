@@ -20,7 +20,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '24'
           cache: 'npm'
 
       - name: Install dependencies
@@ -108,23 +108,33 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
           cache: 'npm'
+
+      - name: Upgrade npm for Trusted Publishing
+        run: |
+          npm install --global 'npm@^11.5.1'
+          echo "Node.js version:"
+          node --version
+          echo "npm version:"
+          npm --version
 
       - name: Get package.json version
         id: pkg
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          echo "name=$PACKAGE_NAME" >> $GITHUB_OUTPUT
 
       - name: Check if version already published on npm
         id: npm-check
         run: |
           VERSION="${{ steps.pkg.outputs.version }}"
-          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          PACKAGE_NAME="${{ steps.pkg.outputs.name }}"
           if npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1; then
             echo "exists=true" >> $GITHUB_OUTPUT
             echo "Version ${PACKAGE_NAME}@${VERSION} already published on npm"
@@ -137,21 +147,16 @@ jobs:
         if: steps.npm-check.outputs.exists == 'false'
         run: npm ci
 
-      - name: Build package (if build script exists)
+      - name: Run tests
         if: steps.npm-check.outputs.exists == 'false'
-        run: |
-          if npm run build --if-present 2>/dev/null; then
-            echo "Build completed"
-          else
-            echo "No build script, skipping"
-          fi
+        run: npm test
 
       - name: Publish to npm (Trusted Publishers / OIDC)
         if: steps.npm-check.outputs.exists == 'false'
-        run: |
-          npm publish --access public --provenance
-          echo "Published successfully via Trusted Publishers"
-        # No NODE_AUTH_TOKEN: Trusted Publishers (OIDC) handles auth via github.token
-        # 2FA on npm does NOT block OIDC publishes
-        # REQUIRES: Trusted Publisher configured at PACKAGE level in npm:
-        #   https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers
+        run: npm publish --access public
+        env:
+          # No NODE_AUTH_TOKEN: Trusted Publishers (OIDC) handles auth via github.token
+          # 2FA on npm does NOT block OIDC publishes
+          # REQUIRES: Trusted Publisher configured at PACKAGE level in npm:
+          #   https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers
+          # REQUIRES: Permission "npm publish" enabled (not just "npm stage publish")
