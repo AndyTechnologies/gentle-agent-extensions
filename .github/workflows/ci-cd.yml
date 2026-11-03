@@ -156,12 +156,3 @@ jobs:
           # 2FA on npm does NOT block OIDC publishes
           # REQUIRES: Trusted Publisher configured at PACKAGE level in npm:
           #   https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers
-        continue-on-error: true
-
-      - name: Warn if npm publish failed
-        if: steps.npm-check.outputs.exists == 'false' && failure()
-        run: |
-          echo "::warning::npm publish failed - Trusted Publisher may not be configured at package level"
-          echo "::warning::Configure at: https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers"
-          echo "::warning::Repository: AndyTechnologies/gentle-agent-extensions"
-          echo "::warning::Workflow: ci-cd.yml"
