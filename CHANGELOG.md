@@ -4,7 +4,7 @@ All notable changes to `gentle-agent-extensions` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.3.0] - 2026-11-02
+## [1.3.1] - 2026-11-02
 
 ### Added
 - **Product Quest skill** (`resources/skills/product-quest/`) — Detects and documents product/domain decisions in ODD tasks via `## Product Contract` with stable `PC-XX` clause IDs; gap detection for scope ambiguity, domain rules, user flows, data ownership, integration contracts, NFRs, edge cases, migration; coordinates with Architecture Quest via cross-references (`AC-XX` ↔ `PC-YY`)
@@ -29,6 +29,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Removed
 - Symlinks in `~/.agents/skills/` pointing to `~/.config/sdd-own/skills/` (23 symlinks removed)
+
+## [1.3.0] - 2026-11-02
+
+### Added
+- **CI/CD: npm publish job with Trusted Publishers (OIDC)** — Verifies version not already on npm; uses `npm publish --provenance` without token; 2FA does not block OIDC
+- **changelog-generator skill** — Detects version files (package.json, Cargo.toml, pyproject.toml, go.mod, etc.); reminds user to bump version before commit/tag
+
+### Changed
+- **ci-cd.yml** — Added publish-npm job parallel to release job
 
 ## [1.2.1] - 2026-11-01
 
