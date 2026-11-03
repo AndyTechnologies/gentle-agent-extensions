@@ -442,11 +442,55 @@ function applyOverlay(overlay: OverlayDefinition, targetName: string, options: {
 	}
 }
 
-function evaluateRouting(agentName: string): RoutingDefinition | null {
+function evaluateRouting(agentName: string, ctx?: { cwd?: string; env?: NodeJS.ProcessEnv }): RoutingDefinition[] {
 	const routes = Array.from(projectState.routing.values())
-		.filter(r => r.triggers.some(t => agentName.includes(t) || t.includes(agentName)))
+		.filter(r => {
+			// Check triggers
+			const triggerMatch = r.triggers.some(t => agentName.includes(t) || t.includes(agentName));
+			if (!triggerMatch) return false;
+			
+			// Check conditions
+			if (r.conditions && r.conditions.length > 0 && ctx) {
+				return r.conditions.every(c => evaluateCondition(c, ctx));
+			}
+			return true;
+		})
 		.sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
-	return routes[0] ?? null;
+	return routes;
+}
+
+function evaluateCondition(condition: string, ctx: { cwd?: string; env?: NodeJS.ProcessEnv }): boolean {
+	// File existence: file:path/to/file
+	if (condition.startsWith("file:")) {
+		const filePath = condition.slice(5);
+		const fullPath = ctx.cwd ? join(ctx.cwd, filePath) : filePath;
+		return existsSync(fullPath);
+	}
+	// Environment variable: env:VAR_NAME or env:VAR_NAME=value
+	if (condition.startsWith("env:")) {
+		const envPart = condition.slice(4);
+		const eqIdx = envPart.indexOf("=");
+		if (eqIdx === -1) {
+			return !!ctx.env?.[envPart];
+		}
+		const varName = envPart.slice(0, eqIdx);
+		const expectedValue = envPart.slice(eqIdx + 1);
+		return ctx.env?.[varName] === expectedValue;
+	}
+	// Branch name: branch:branch-name
+	if (condition.startsWith("branch:")) {
+		const expectedBranch = condition.slice(7);
+		try {
+			const currentBranch = require("node:child_process")
+				.execSync("git branch --show-current", { cwd: ctx.cwd, encoding: "utf8" })
+				.trim();
+			return currentBranch === expectedBranch;
+		} catch {
+			return false;
+		}
+	}
+	// Custom function: func:functionName (for future extensibility)
+	return false;
 }
 
 interface McpHandshakeResult {
@@ -933,19 +977,41 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 			}
 
 			// Routing: evaluate and inject delegation instructions
-			const route = evaluateRouting(agentName);
-			if (route) {
-				const routingInstructions = `\n\n<!-- gentle-agent-extensions: routing for ${agentName} -->\n`;
-				routingInstructions += `## Delegation Rules for ${agentName}\n`;
-				routingInstructions += `- **Agent**: ${route.agent}\n`;
-				routingInstructions += `- **Triggers**: ${route.triggers.join(", ")}\n`;
-				if (route.requiredSkills && route.requiredSkills.length > 0) {
-					routingInstructions += `- **Required Skills**: ${route.requiredSkills.join(", ")}\n`;
+			const routes = evaluateRouting(agentName, { cwd: ctx.cwd, env: ctx.env });
+			if (routes.length > 0) {
+				const primaryRoute = routes[0];
+				const routingInstructions = `
+
+<!-- gentle-agent-extensions: routing for ${agentName} -->
+`;
+				routingInstructions += `## Delegation Rules for ${agentName}
+`;
+				routingInstructions += `- **Primary Agent**: ${primaryRoute.agent}
+`;
+				routingInstructions += `- **Triggers**: ${primaryRoute.triggers.join(", ")}
+`;
+				if (primaryRoute.requiredSkills && primaryRoute.requiredSkills.length > 0) {
+					routingInstructions += `- **Required Skills**: ${primaryRoute.requiredSkills.join(", ")}
+`;
 				}
-				if (route.requiredMcp && route.requiredMcp.length > 0) {
-					routingInstructions += `- **Required MCP**: ${route.requiredMcp.join(", ")}\n`;
+				if (primaryRoute.requiredMcp && primaryRoute.requiredMcp.length > 0) {
+					routingInstructions += `- **Required MCP**: ${primaryRoute.requiredMcp.join(", ")}
+`;
 				}
-				routingInstructions += `- **Delegation**: ${route.delegation}\n`;
+				routingInstructions += `- **Delegation**: ${primaryRoute.delegation}
+`;
+				routingInstructions += `- **Priority**: ${primaryRoute.priority ?? 100}
+`;
+				if (routes.length > 1) {
+					routingInstructions += `
+**Fallback Routes** (lower priority):
+`;
+					for (let i = 1; i < routes.length; i++) {
+						const r = routes[i];
+						routingInstructions += `- ${r.agent} (priority ${r.priority ?? 100}): triggers=${r.triggers.join(",")}
+`;
+					}
+				}
 				appendSystemPromptOnce(options, routingInstructions);
 			}
 		}
