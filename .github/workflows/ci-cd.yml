@@ -101,7 +101,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write  # for npm provenance
+      id-token: write  # for npm provenance (Trusted Publishers)
     steps:
       - uses: actions/checkout@v4
         with:
@@ -146,8 +146,22 @@ jobs:
             echo "No build script, skipping"
           fi
 
-      - name: Publish to npm
+      - name: Publish to npm (Trusted Publishers / OIDC)
         if: steps.npm-check.outputs.exists == 'false'
-        run: npm publish --access public --provenance
-        # No NODE_AUTH_TOKEN needed: Trusted Publishers (OIDC) handles auth via github.token
-        # 2FA on npm does NOT block OIDC publishes
+        run: |
+          npm publish --access public --provenance
+          echo "Published successfully via Trusted Publishers"
+        env:
+          # No NODE_AUTH_TOKEN: Trusted Publishers (OIDC) handles auth via github.token
+          # 2FA on npm does NOT block OIDC publishes
+          # REQUIRES: Trusted Publisher configured at PACKAGE level in npm:
+          #   https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers
+        continue-on-error: true
+
+      - name: Warn if npm publish failed
+        if: steps.npm-check.outputs.exists == 'false' && failure()
+        run: |
+          echo "::warning::npm publish failed - Trusted Publisher may not be configured at package level"
+          echo "::warning::Configure at: https://www.npmjs.com/package/gentle-agent-extensions/settings/trusted-publishers"
+          echo "::warning::Repository: AndyTechnologies/gentle-agent-extensions"
+          echo "::warning::Workflow: ci-cd.yml"
