@@ -31,6 +31,7 @@ metadata:
 | **At least 2 version options** | Always propose minimum 2 SemVer bump levels with rationale |
 | **No auto-commit** | Generates changelog content and proposals; user commits |
 | **Keep a Changelog format** | Output follows Keep a Changelog (https://keepachangelog.com/) |
+| **Version bump reminder** | Before finalizing, remind user to bump version in project's version file (package.json, Cargo.toml, pyproject.toml, go.mod, etc.) |
 
 ## Knowledge Base
 
@@ -101,15 +102,34 @@ metadata:
    - At least one alternative with rationale
    - Explain what would be needed for each level
 
-7. **Write/update CHANGELOG.md**
+7. **Detect project version file**
+   - Check for common version files in repo root:
+     - `package.json` → `version` field (npm/Node.js)
+     - `Cargo.toml` → `version` field (Rust)
+     - `pyproject.toml` → `project.version` or `tool.poetry.version` (Python)
+     - `go.mod` → module version (Go)
+     - `setup.py` / `setup.cfg` → `version` (Python legacy)
+     - `pom.xml` → `<version>` (Maven/Java)
+     - `build.gradle` / `build.gradle.kts` → `version` (Gradle)
+     - `mix.exs` → `@version` (Elixir)
+     - `composer.json` → `version` (PHP)
+     - `version.txt` / `VERSION` → plain text version
+   - Report detected version file(s) and current version
+
+8. **Write/update CHANGELOG.md**
    - Prepend new version section at top
    - Preserve existing history
    - Use format: `## [X.Y.Z] - YYYY-MM-DD`
 
-8. **Present to user**
+9. **Present to user with version bump reminder**
    - Show generated changelog section
    - Show version proposals with rationale
+   - **Remind user to bump version in detected version file(s)** before committing/tagging
    - Ask user to confirm, modify, or reject
+
+10. **Optional: Auto-bump version file**
+    - If user confirms, offer to update the detected version file(s) with the chosen version
+    - User must explicitly approve any file modification
 
 ## Output Contract
 
@@ -120,6 +140,8 @@ Upon completion, deliver:
 - [ ] Substantiality analysis summary (files, lines, categories, scores)
 - [ ] Updated CHANGELOG.md content (not committed)
 - [ ] Clear recommendation and alternatives
+- [ ] Detected version file(s) and current version
+- [ ] **Explicit reminder to bump version in version file(s)** before commit/tag
 
 ## SemVer Proposal Format
 

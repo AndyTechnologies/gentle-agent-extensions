@@ -7,7 +7,8 @@ on:
     branches: [main]
 
 permissions:
-  contents: write  # needed to create releases/tags
+  contents: write      # needed to create releases/tags
+  id-token: write      # needed for npm provenance (Trusted Publisher)
 
 jobs:
   test:
@@ -92,3 +93,61 @@ jobs:
           echo "Created release $TAG"
         env:
           GH_TOKEN: ${{ github.token }}
+
+  publish-npm:
+    name: Publish to npm
+    needs: test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write  # for npm provenance
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: 'npm'
+
+      - name: Get package.json version
+        id: pkg
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if version already published on npm
+        id: npm-check
+        run: |
+          VERSION="${{ steps.pkg.outputs.version }}"
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          if npm view "${PACKAGE_NAME}@${VERSION}" version >/dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+            echo "Version ${PACKAGE_NAME}@${VERSION} already published on npm"
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "Version ${PACKAGE_NAME}@${VERSION} not yet published on npm"
+          fi
+
+      - name: Install dependencies
+        if: steps.npm-check.outputs.exists == 'false'
+        run: npm ci
+
+      - name: Build package (if build script exists)
+        if: steps.npm-check.outputs.exists == 'false'
+        run: |
+          if npm run build --if-present 2>/dev/null; then
+            echo "Build completed"
+          else
+            echo "No build script, skipping"
+          fi
+
+      - name: Publish to npm
+        if: steps.npm-check.outputs.exists == 'false'
+        run: npm publish --access public --provenance
+        # No NODE_AUTH_TOKEN needed: Trusted Publishers (OIDC) handles auth via github.token
+        # 2FA on npm does NOT block OIDC publishes
