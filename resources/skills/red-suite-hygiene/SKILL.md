@@ -33,6 +33,17 @@ Load before running or diagnosing any test suite that:
 | Flaky FAILs that pass on re-run | Resource contention, port conflicts, timing | Sweep orphans, check port usage, re-run |
 | `fake_api`, `mock_server`, `chrome`, `playwright` processes with ppid=1 | Orphans from interrupted run | Kill confirmed PID list |
 
+## Decision Gates
+
+| Situation | Action |
+|-----------|--------|
+| Suite passes after clean run | No action needed |
+| FAIL with environmental errors nearby | Classify as invalid, re-run after sweep |
+| FAIL persists after clean run | Real defect — investigate contract |
+| Orphan processes found | Kill confirmed PIDs only |
+| /tmp > 70% full | Sweep before running |
+| Flaky FAILs pass on re-run | Investigate resource contention |
+
 ## Execution Steps
 
 ### 1. Preflight: Check `/tmp` health

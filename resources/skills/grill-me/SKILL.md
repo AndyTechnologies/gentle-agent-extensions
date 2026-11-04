@@ -1,25 +1,60 @@
 ---
 name: grill-me
-description: "A deliberate, bounded interview to sharpen a plan or design before committing. User-invoked only — the human starts it. Never model-invoked."
+description: "Trigger: bounded interview, grilling session, stress-test plan. A deliberate, bounded interview to sharpen a plan or design before committing. User-invoked only — the human starts it. Never model-invoked."
 disable-model-invocation: true
+license: MIT
+metadata:
+  author: AndyTechnologies
+  version: "1.0"
 ---
 
 # grill-me — user-invoked grilling entry point
 
-This is the user-facing entry point for a **bounded** grilling session. It is user-invoked only: it must never be reached automatically by a model, which is why `disable-model-invocation: true`.
+## Activation Contract
 
-## Usage
+**Use this skill when:**
+- User explicitly requests a grilling session (`/grill-me`, "grill me", "grill my plan")
+- User wants to stress-test a plan, design, or decision before committing
+- User wants bounded interview to sharpen alignment
 
-The human types `/grill-me` (or the equivalent) to start a grilling session about a plan, design, or decision. It sharpens alignment before any code is written.
+**Do NOT use this skill for:**
+- Automatic model invocation (enforced by `disable-model-invocation: true`)
+- Continuous or unbounded interviewing
+- Replacing `grilling` skill's internal interview logic
 
-## Execution
+## Hard Rules
 
-Load and follow the `grilling` skill, which owns the interview primitive:
+| Rule | Description |
+|------|-------------|
+| **User-invoked only** | Never triggered automatically by model. Human must explicitly start. |
+| **Bounded session** | Maximum 50 questions per session. |
+| **Delegates to grilling** | Loads and follows `grilling` skill for interview primitive. |
+| **No auto-continuation** | Past 50 questions requires fresh session, not extension. |
 
-- Call the `skill()` tool with the `grilling` skill.
-- Follow its design-tree + 50-question budget discipline exactly: ask ONE focused question at a time, follow each branch to resolution, and do not drag in a stack/language/framework unless the human confirms it as a requirement.
-- Produce the shared-understanding summary and pending branches, then stop for the user's explicit confirmation.
+## Decision Gates
 
-## Boundary (why this avoids the infinite loop)
+| Situation | Action |
+|-----------|--------|
+| User types `/grill-me` | Load `grilling` skill, start interview |
+| Budget exhausted (50 questions) | Stop, summarize, ask for new session |
+| User wants to continue | Start fresh session, not extension |
 
-`grill-me` is a **one-shot bounded session**. It never re-invokes itself, never loops, and never runs more than 50 questions in a single session. If the user wants to continue past the budget, that is a fresh session — not an extension.
+## Execution Steps
+
+1. **Load grilling skill** — Call `skill()` tool with `grilling` skill.
+2. **Start interview** — Follow grilling's design-tree + 50-question budget discipline.
+3. **One question at a time** — Ask exactly ONE focused question, wait for answer.
+4. **Branch resolution** — Follow each answer to resolution before next question.
+5. **Produce summary** — Shared-understanding summary + pending branches.
+6. **Stop for confirmation** — Wait for user's explicit acceptance before proceeding.
+
+## Output Contract
+
+Return:
+- Shared-understanding summary
+- Pending/unresolved branches
+- Explicit user confirmation required before proceeding
+
+## References
+
+- `grilling` skill — Bounded interview primitive (50-question budget, decision tree)

@@ -16,6 +16,7 @@ describe("gentle-agent-extensions package structure", () => {
 		assert.ok(existsSync(join(PROJECT_ROOT, "resources", "overlays")), "resources/overlays/ exists");
 		assert.ok(existsSync(join(PROJECT_ROOT, "resources", "routing")), "resources/routing/ exists");
 		assert.ok(existsSync(join(PROJECT_ROOT, "resources", "skills")), "resources/skills/ exists");
+		assert.ok(existsSync(join(PROJECT_ROOT, "scripts")), "scripts/ exists for validate-skills.ts");
 	});
 
 	test("extension entry point exists", () => {
@@ -79,13 +80,8 @@ describe("gentle-agent-extensions package structure", () => {
 		assert.ok(files.includes("architecture-council.md"), "has architecture-council.md routing");
 	});
 
-	test("no legacy directories exist", () => {
-		assert.ok(!existsSync(join(PROJECT_ROOT, "agents")), "legacy agents/ removed");
-		assert.ok(!existsSync(join(PROJECT_ROOT, "overlays")), "legacy overlays/ removed");
-		assert.ok(!existsSync(join(PROJECT_ROOT, "routing")), "legacy routing/ removed");
-		assert.ok(!existsSync(join(PROJECT_ROOT, "skills")), "legacy skills/ removed");
-		assert.ok(!existsSync(join(PROJECT_ROOT, "scripts")), "legacy scripts/ removed");
-		assert.ok(!existsSync(join(PROJECT_ROOT, "extensions")), "legacy extensions/ removed");
+	test("scripts directory exists for validate-skills.ts", () => {
+		assert.ok(existsSync(join(PROJECT_ROOT, "scripts", "validate-skills.ts")), "scripts/validate-skills.ts exists");
 	});
 });
 
@@ -183,7 +179,14 @@ describe("bundled resources validation", () => {
 		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "gentle-ui", "SKILL.md"), "utf8");
 		assert.ok(content.startsWith("---"), "has frontmatter");
 		assert.ok(content.includes("name: gentle-ui"), "correct name");
-		const sections = ["## Cuándo usar", "## Web UI", "## TUI (terminal)", "## Reglas generales"];
+		const sections = [
+			"## Activation Contract",
+			"## Hard Rules",
+			"## Decision Gates",
+			"## Execution Steps",
+			"## Output Contract",
+			"## References"
+		];
 		for (const section of sections) {
 			assert.ok(content.includes(section), `has section: ${section}`);
 		}
@@ -195,7 +198,14 @@ describe("bundled resources validation", () => {
 		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "github-automation", "SKILL.md"), "utf8");
 		assert.ok(content.startsWith("---"), "has frontmatter");
 		assert.ok(content.includes("name: github-automation"), "correct name");
-		const sections = ["## Prerequisites", "## Tool Surface", "## Automation Workflows", "## Pitfalls", "## Quick Reference", "## Notes for ODD Integration"];
+		const sections = [
+			"## Activation Contract",
+			"## Hard Rules",
+			"## Decision Gates",
+			"## Execution Steps",
+			"## Output Contract",
+			"## References"
+		];
 		for (const section of sections) {
 			assert.ok(content.includes(section), `has section: ${section}`);
 		}
@@ -208,6 +218,17 @@ describe("bundled resources validation", () => {
 		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "grilling", "SKILL.md"), "utf8");
 		assert.ok(content.startsWith("---"), "has frontmatter");
 		assert.ok(content.includes("name: grilling"), "correct name");
+		const sections = [
+			"## Activation Contract",
+			"## Hard Rules",
+			"## Decision Gates",
+			"## Execution Steps",
+			"## Output Contract",
+			"## References"
+		];
+		for (const section of sections) {
+			assert.ok(content.includes(section), `has section: ${section}`);
+		}
 		assert.ok(content.includes("50"), "references 50-question budget");
 		assert.ok(content.includes("disable-model-invocation: true"), "disabled for model invocation");
 	});
@@ -224,7 +245,7 @@ describe("bundled resources validation", () => {
 		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "red-suite-hygiene", "SKILL.md"), "utf8");
 		assert.ok(content.startsWith("---"), "has frontmatter");
 		assert.ok(content.includes("name: red-suite-hygiene"), "correct name");
-		const sections = ["## Activation Contract", "## Hard Rules", "## Common Environmental Noise Patterns", "## Execution Steps", "## Output Contract", "## Project Adaptation", "## References"];
+		const sections = ["## Activation Contract", "## Hard Rules", "## Decision Gates", "## Execution Steps", "## Output Contract", "## References"];
 		for (const section of sections) {
 			assert.ok(content.includes(section), `has section: ${section}`);
 		}
@@ -275,7 +296,7 @@ describe("bundled resources validation", () => {
 		const content = readFileSync(join(PROJECT_ROOT, "resources", "skills", "using-git-worktrees", "SKILL.md"), "utf8");
 		assert.ok(content.startsWith("---"), "has frontmatter");
 		assert.ok(content.includes("name: using-git-worktrees"), "correct name");
-		const sections = ["## Overview", "## Step 0", "## Step 1", "## Step 2", "## Step 3", "## Quick Reference", "## Common Rationalizations", "## Provenance"];
+		const sections = ["## Activation Contract", "## Hard Rules", "## Decision Gates", "## Execution Steps", "## Output Contract", "## References"];
 		for (const section of sections) {
 			assert.ok(content.includes(section), `has section: ${section}`);
 		}

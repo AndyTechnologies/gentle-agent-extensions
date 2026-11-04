@@ -33,7 +33,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
-    "test": "npx tsx tests/gentle-extensions.test.ts"
+    "test": "npx tsx tests/gentle-extensions.test.ts",
+    "validate:skills": "npx tsx scripts/validate-skills.ts"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "^1.5.0",

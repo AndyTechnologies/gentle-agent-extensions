@@ -9,26 +9,54 @@ metadata:
 
 # Gentle-AI Design System
 
-## Cuándo usar
+## Activation Contract
 
-Siempre que generes o modifiques componentes de UI (web, desktop, TUI) para el ecosistema Gentle-AI o Gentleman Programming.
+**Use this skill when:**
+- Generating or modifying UI components (web, desktop, TUI) for the Gentle-AI or Gentleman Programming ecosystem.
+- User requests "gentle-ai style", "estilo gentle", "diseño gentle", or a dark-first zinc/magenta or Rose Pine UI.
 
-## Web UI
+**Do NOT use this skill for:**
+- Backend, API, or infrastructure only changes.
+- Non-Gentle-AI design systems without explicit request.
 
-- **Colores**: fondo `#09090b`; tarjetas `#111113`; código `#18181c`; bordes `#ffffff12` (hover: `#ea188959`); texto `#fafafa` / `#a1a1aa` / `#52525b`; acento `#ea1889` (hover: `#ff6db0`, sutil: `#ea188926`).
-- **Tipografía**: `Inter, system-ui, -apple-system, sans-serif`. Pesos: 400 cuerpo, 500 medium, 600 semibold, 700 bold, 800 extrabold. Código: `ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas`.
-- **Estructura**: contenedor `max-w-6xl mx-auto px-4 sm:px-6 lg:px-8`. Navegación fija con `bg-black/80 backdrop-blur-xl border-b border-border`. `rounded-lg` (8px) para controles, `rounded-2xl` (16px) para tarjetas. Transiciones `transition-colors` en interactivos. Espaciado en múltiplos de 4px.
+## Hard Rules
 
-## TUI (terminal)
+| Rule | Description |
+|------|-------------|
+| **Dark-first** | If generating light mode, invert the gray scale keeping `#ea1889` as accent. |
+| **Single chromatic accent** | Do not introduce additional colors outside the defined palette. |
+| **Typography hierarchy** | Maximum 3 distinct weights per view. |
+| **Subtle borders** | `#ffffff12`, never pure hard lines. |
+| **Consistent radii** | 8px controls, 16px cards. |
+| **Spacing** | Multiples of 4px. |
 
-- **Tema Rose Pine**: fondo `#191724`; texto `#e0def4`; secundario `#908caa`; acento/selección `#c4a7e7`; encabezados `#ebbcba`; éxito `#9ccfd8`; error `#eb6f92`; advertencia `#f1ca93`.
-- **Evitar** `#6e6a86` y `#31748f` para texto normal (contraste < 4.5:1).
-- **Estructura**: cajas con bordes suaves, padding interno consistente. Encabezados en Mauve, acciones/estados activos en Lavender. Errores en Red, warnings en Yellow.
+## Decision Gates
 
-## Reglas generales
+| Situation | Action |
+|-----------|--------|
+| Request targets Gentle-AI ecosystem | Apply full Gentle-AI design system |
+| Request is for non-Gentle-AI UI | Use generic ui-design skill instead |
+| Dark mode requested | Use zinc/magenta (web) or Rose Pine (TUI) |
+| Light mode requested | Invert gray scale, keep magenta accent |
 
-- Dark-first. Si generas modo claro, invierte la escala de grises manteniendo `#ea1889` como acento.
-- Un solo acento cromático. No introduzcas colores adicionales fuera de la paleta definida.
-- Jerarquía tipográfica clara: máximo 3 pesos distintos por vista.
-- Bordes sutiles (`#ffffff12`), nunca líneas duras puras.
-- Radios consistentes: 8px controles, 16px tarjetas.
+## Execution Steps
+
+1. **Detect context** — Determine if request targets Gentle-AI ecosystem or generic UI.
+2. **Apply tokens** — Use zinc/magenta (web) or Rose Pine (TUI) tokens.
+3. **Apply structure** — Fixed nav, max-w-6xl container, transition-colors on interactives.
+4. **Verify compliance** — Check all Hard Rules are satisfied.
+
+## Output Contract
+
+Return design decisions with:
+- Color palette and tokens
+- Typography scale and weights
+- Spacing and radius values
+- Component structure patterns
+- Compliance verification against Hard Rules
+
+## References
+
+- `ui-design` skill — UI/UX decisions checklist
+- `ui-ux-principles` skill — HCD, Nielsen, WCAG 2.2
+- `gentle-design` skill — Design canvas, artboards, handoff (external: gentle-pi package)
