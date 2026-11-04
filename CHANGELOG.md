@@ -4,6 +4,17 @@ All notable changes to `gentle-agent-extensions` are documented here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/), and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.1] - 2026-11-04
+
+### Added
+- **Product Contract Verifier agent** (`resources/agents/product-contract-verifier.md`) — Read-only contractual verifier for Product Quest contracts; verifies PC-XX clause compliance before changelog generation
+- **Product Contract Verifier routing** (`resources/routing/product-contract-verifier.md`) — Delegation rules for the verifier agent
+- **Orchestrator integration** — Verifier runs after implementation, after Verify, before Changelog Generator
+
+### Changed
+- **Orchestrator overlay** — Added Product Contract Verifier execution section; runs after implementation/Verify, before Changelog Generator
+- **Verification procedure** — Per-clause PASS/FAIL/UNVERIFIED/NOT_APPLICABLE with evidence; handles assumed/deferred clauses; cross-references AC-XX
+
 ## [1.3.4] - 2026-11-03
 
 ### Fixed
