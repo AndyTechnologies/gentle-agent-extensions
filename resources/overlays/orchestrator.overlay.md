@@ -167,6 +167,35 @@ When Product Quest activates, the orchestrator must:
 
 ---
 
+## Product Contract Verifier Execution
+
+When an accepted product contract exists for the current task:
+
+1. After implementation is complete for the relevant unit
+2. After `gentle-ai-verify` runs (when native rules require it)
+3. **Before** invoking the Changelog Generator for the candidate
+
+Delegate to `product-contract-verifier` via `subagent_run` with:
+- The accepted product contract (or reference to ODD document `## Product Contract`)
+- Specific clause IDs to verify
+- Implementation scope (diff summary or affected files)
+- Summary of Verify results
+- Path to ODD task document and relevant product docs
+- Tests/evidence related to each clause
+- Cross-referenced architectural contract clauses (AC-XX)
+
+## Verifier Result Handling
+
+| Verifier Result | Action |
+|----------------|--------|
+| `PASS` | Continue to Changelog Generator per its activation conditions |
+| `FAIL` | Identify failed clauses; if correctable within authorized scope, return to worker with exact clauses and evidence; after correction, re-run relevant Verify, then re-run Verifier |
+| `INCOMPLETE` | Obtain missing evidence or register concrete limitation; do NOT treat as PASS |
+
+**Critical:** Verifier is read-only. It does not modify code, contract, or decisions. It does not ask the user. It does not duplicate Verify or `review-risk`.
+
+---
+
 ## Architecture Council Execution
 
 When an accepted architectural contract exists for the current task:
