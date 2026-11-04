@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync, cpSync, statSync } from "node:fs";
+import { spawnSync, spawn } from "node:child_process";
 import { join, resolve, dirname } from "node:path";
 import { homedir } from "node:os";
 import { fileURLToPath } from "node:url";
@@ -48,6 +49,11 @@ interface McpServerDefinition {
 	};
 	capabilities?: string[];
 	agentDependencies?: string[];
+	// Lifecycle state (populated from persistent state)
+	lifecycleState?: "available" | "disabled" | "failed" | "not_installed" | "installing" | "updating";
+	installedVersion?: string;
+	lastHealthCheck?: number;
+	lastError?: string;
 }
 
 interface RoutingDefinition {
@@ -75,6 +81,8 @@ const projectState: ProjectState = {
 	mcpServers: new Map(),
 	initialized: false,
 };
+
+let mcpLifecycleManager: McpLifecycleManager | null = null;
 
 function getAgentHome(env: NodeJS.ProcessEnv = process.env): string {
 	if (env.GENTLE_PI_AGENT_HOME) return resolve(env.GENTLE_PI_AGENT_HOME);
@@ -399,8 +407,7 @@ async function installMcpServer(ctx: ExtensionContext, name: string): Promise<bo
 	try {
 		ctx.ui.notify(`[${EXTENSION_NAME}] Installing MCP server ${name} via ${manager}...`, "info");
 
-		const { spawnSync } = await import("node:child_process");
-		const args: string[] = [];
+				const args: string[] = [];
 
 		if (manager === "npm") {
 			args.push("install", "-g", `${pkg}@${version}`);
@@ -737,8 +744,7 @@ async function runDoctorChecks(cwd: string, env: NodeJS.ProcessEnv, includeMcpHe
 			for (const [name, server] of servers) {
 				if (server.transport === "stdio") {
 					try {
-						const { spawn } = await import("node:child_process");
-						const child = spawn(server.command!, server.args || [], {
+												const child = spawn(server.command!, server.args || [], {
 							stdio: ["pipe", "pipe", "ignore"],
 							env: { ...process.env, ...server.env },
 							cwd: server.cwd
@@ -942,6 +948,266 @@ function generateGraphSummary(graph: GraphValidationResult): string {
 
 
 
+
+
+// ============================================================================
+// MCP Lifecycle Manager
+// ============================================================================
+
+interface McpStateEntry {
+	name: string;
+	lifecycleState: "available" | "disabled" | "failed" | "not_installed" | "installing" | "updating";
+	installedVersion?: string;
+	lastHealthCheck?: number;
+	lastError?: string;
+	installConfig?: {
+		package: string;
+		version: string;
+		manager: string;
+	};
+}
+
+interface McpLifecycleConfig {
+	autoInstall: boolean;
+	allowList: {
+		managers: string[];
+		packages: Record<string, string[]>;
+	};
+	stateFile: string;
+}
+
+const DEFAULT_LIFECYCLE_CONFIG: McpLifecycleConfig = {
+	autoInstall: false,
+	allowList: {
+		managers: ["npm", "uv", "pip", "cargo"],
+		packages: {
+			npm: ["*"],
+			uv: ["*"],
+			pip: ["*"],
+			cargo: ["*"],
+		},
+	},
+	stateFile: ".gentle-agent-extensions/mcp-state.json",
+};
+
+class McpLifecycleManager {
+	private config: McpLifecycleConfig;
+	private state: Map<string, McpStateEntry> = new Map();
+	private extensionName: string;
+
+	constructor(extensionName: string, config?: Partial<McpLifecycleConfig>) {
+		this.extensionName = extensionName;
+		this.config = { ...DEFAULT_LIFECYCLE_CONFIG, ...config };
+	}
+
+	private getStateFilePath(cwd: string): string {
+		return join(cwd, this.config.stateFile);
+	}
+
+	async loadProjectState(cwd: string): Promise<void> {
+		const statePath = this.getStateFilePath(cwd);
+		if (!existsSync(statePath)) {
+			this.state.clear();
+			return;
+		}
+		try {
+			const content = readFileSync(statePath, "utf8");
+			const data = JSON.parse(content);
+			this.state.clear();
+			for (const [name, entry] of Object.entries(data)) {
+				this.state.set(name, entry as McpStateEntry);
+			}
+		} catch (e) {
+			console.warn(`[${this.extensionName}] Failed to load MCP state: ${e}`);
+			this.state.clear();
+		}
+	}
+
+	async saveProjectState(cwd: string): Promise<void> {
+		const statePath = this.getStateFilePath(cwd);
+		ensureDir(dirname(statePath));
+		const data = Object.fromEntries(this.state);
+		writeFileSync(statePath, JSON.stringify(data, null, 2));
+	}
+
+	getState(name: string): McpStateEntry | undefined {
+		return this.state.get(name);
+	}
+
+	getAllStates(): McpStateEntry[] {
+		return Array.from(this.state.values());
+	}
+
+	async setState(name: string, entry: Partial<McpStateEntry>): Promise<void> {
+		const existing = this.state.get(name) || { name };
+		this.state.set(name, { ...existing, ...entry });
+		await this.saveProjectState(process.cwd());
+	}
+
+	isAllowed(manager: string, pkg: string): boolean {
+		if (!this.config.allowList.managers.includes(manager)) return false;
+		const allowedPackages = this.config.allowList.packages[manager] || [];
+		if (allowedPackages.includes("*")) return true;
+		return allowedPackages.includes(pkg);
+	}
+
+	async detectInstalledVersion(manager: string, pkg: string, version?: string): Promise<string | null> {
+				let result;
+		switch (manager) {
+			case "npm":
+				result = spawnSync("npm", ["list", "-g", `${pkg}@${version || ""}`], { stdio: "ignore" });
+				break;
+			case "uv":
+				result = spawnSync("uv", ["tool", "list"], { encoding: "utf8" });
+				if (result.status === 0) {
+					const lines = result.stdout.split("\n");
+					for (const line of lines) {
+						if (line.includes(pkg)) {
+							const parts = line.split(/\s+/);
+							if (parts.length >= 2) return parts[1];
+						}
+					}
+				}
+				return null;
+			case "pip":
+				result = spawnSync("pip", ["show", pkg], { encoding: "utf8" });
+				if (result.status === 0) {
+					const match = result.stdout.match(/Version: (\S+)/);
+					if (match) return match[1];
+				}
+				return null;
+			case "cargo":
+				result = spawnSync("cargo", ["install", "--list"], { encoding: "utf8" });
+				if (result.status === 0) {
+					const lines = result.stdout.split("\n");
+					for (const line of lines) {
+						if (line.startsWith(pkg + " ")) {
+							const parts = line.split(/\s+/);
+							if (parts.length >= 2) return parts[1];
+						}
+					}
+				}
+				return null;
+			default:
+				return null;
+		}
+		if (result.status === 0 && result.stdout) {
+			const match = result.stdout.match(new RegExp(`${pkg}@([^\\s]+)`));
+			if (match) return match[1];
+		}
+		return null;
+	}
+
+	async install(server: McpServerDefinition, cwd: string): Promise<boolean> {
+		if (!server.install) return false;
+		const { manager, package: pkg, version } = server.install;
+		if (!this.isAllowed(manager, pkg)) {
+			throw new Error(`Manager ${manager} or package ${pkg} not in allowList`);
+		}
+		await this.setState(pkg, { lifecycleState: "installing" });
+				const args: string[] = [];
+		switch (manager) {
+			case "npm":
+				args.push("install", "-g", `${pkg}@${version}`);
+				break;
+			case "uv":
+				args.push("tool", "install", `${pkg}==${version}`);
+				break;
+			case "pip":
+				args.push("install", `${pkg}==${version}`);
+				break;
+			case "cargo":
+				args.push("install", pkg, "--version", version);
+				break;
+			default:
+				return false;
+		}
+		const result = spawnSync(manager, args, { stdio: "inherit", shell: false });
+		if (result.status !== 0) {
+			await this.setState(pkg, { lifecycleState: "failed", lastError: `Exit code ${result.status}` });
+			return false;
+		}
+		const installedVersion = await this.detectInstalledVersion(manager, pkg, version);
+		await this.setState(pkg, {
+			lifecycleState: "available",
+			installedVersion,
+			installConfig: { package: pkg, version, manager },
+		});
+		return true;
+	}
+
+	async uninstall(pkg: string): Promise<boolean> {
+		const entry = this.state.get(pkg);
+		if (!entry || !entry.installConfig) return false;
+		const { manager, package: pkgName, version } = entry.installConfig;
+				let args: string[] = [];
+		switch (manager) {
+			case "npm":
+				args.push("uninstall", "-g", pkg);
+				break;
+			case "uv":
+				args.push("tool", "uninstall", pkg);
+				break;
+			case "pip":
+				args.push("uninstall", pkg);
+				break;
+			case "cargo":
+				args.push("uninstall", pkg);
+				break;
+			default:
+				return false;
+		}
+				const result = spawnSync(manager, args, { stdio: "inherit", shell: false });
+		if (result.status !== 0) return false;
+		await this.setState(pkg, { lifecycleState: "not_installed", installedVersion: undefined });
+		return true;
+	}
+
+	async healthCheck(server: McpServerDefinition): Promise<{ ok: boolean; error?: string }> {
+		const pkg = server.install?.package || server.name;
+		const start = Date.now();
+		let result: { ok: boolean; error?: string };
+		if (server.transport === "stdio") {
+						const child = spawn(server.command!, server.args || [], {
+				stdio: ["pipe", "pipe", "ignore"],
+				env: { ...process.env, ...server.env },
+				cwd: server.cwd
+			});
+			const result = await performMcpHandshake(child, server.name, server);
+			await this.setState(server.name, {
+				lifecycleState: result.ok ? "available" : "failed",
+				lastHealthCheck: Date.now(),
+				lastError: result.error,
+			});
+			return result;
+		} else if (server.transport === "http") {
+			const result = await performHttpMcpHandshake(server);
+			await this.setState(server.name, {
+				lifecycleState: result.ok ? "available" : "failed",
+				lastHealthCheck: Date.now(),
+				lastError: result.error,
+			});
+			return result;
+		}
+		return { ok: false, error: "Unknown transport" };
+	}
+
+	async getStatusReport(): Promise<string> {
+		const entries = this.getAllStates();
+		if (entries.length === 0) return "No MCP servers configured.";
+		let report = "MCP Servers Status:\n\n";
+		for (const entry of entries) {
+			const state = entry.lifecycleState || "unknown";
+			const version = entry.installedVersion ? ` v${entry.installedVersion}` : "";
+			const health = entry.lastHealthCheck ? ` (last check: ${Math.round((Date.now() - entry.lastHealthCheck) / 1000)}s ago)` : "";
+			const error = entry.lastError ? ` - ${entry.lastError}` : "";
+			report += `  ${entry.name}${version}: ${state}${health}${error}\n`;
+		}
+		return report;
+	}
+}
+
+
 export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 	pi.on("session_start", async (_event, ctx: ExtensionContext) => {
 		initializeBundledState();
@@ -949,8 +1215,23 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 		// Copy bundled agents to project's .pi/agents/
 		await copyBundledAgentsToProject(ctx.cwd);
 
+		// Initialize MCP Lifecycle Manager
+		const mcpLifecycleManager = new McpLifecycleManager(EXTENSION_NAME);
+		await mcpLifecycleManager.loadProjectState(ctx.cwd);
+
 		// Register bundled MCP servers (no auto-install)
 		await registerBundledMcpServers(ctx);
+		
+		// Sync lifecycle state with registered servers
+		for (const [name, server] of projectState.mcpServers) {
+			const state = mcpLifecycleManager.getState(name);
+			if (state) {
+				server.lifecycleState = state.lifecycleState;
+				server.installedVersion = state.installedVersion;
+				server.lastHealthCheck = state.lastHealthCheck;
+				server.lastError = state.lastError;
+			}
+		}
 	});
 
 	pi.on("before_agent_start", (event, ctx: ExtensionContext) => {
@@ -1041,14 +1322,9 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 				const graph = buildResourceGraph(ctx.cwd);
 				const summary = generateGraphSummary(graph);
 				const dot = generateGraphVizDot(graph);
-				let output = "Resource Graph:
-
-" + summary;
+				let output = "Resource Graph:\n\n" + summary;
 				if (args?.dot) {
-					output += "
-
-GraphViz DOT:
-" + dot;
+					output += "\n\nGraphViz DOT:\n" + dot;
 				}
 				ctx.ui.notify(output, graph.errors.length > 0 ? "error" : "info");
 				return;
@@ -1092,19 +1368,28 @@ GraphViz DOT:
 		},
 	});
 
-	pi.registerCommand("gentle-extensions:mcp-health", {
+		pi.registerCommand("gentle-extensions:mcp-health", {
 		description: "Check MCP server connectivity (stdio startup, HTTP reachability)",
 		handler: async (_args, ctx) => {
-			const { issues, warnings } = await runDoctorChecks(ctx.cwd, ctx.env, true);
-			let output = "MCP Health Check:\n\n";
-			if (issues.length > 0) { output += "❌ Issues:\n"; for (const i of issues) output += `  - ${i}\n`; output += "\n"; }
-			if (warnings.length > 0) { output += "⚠️  Warnings:\n"; for (const w of warnings) output += `  - ${w}\n`; output += "\n"; }
-			if (issues.length === 0 && warnings.length === 0) output += "✅ All MCP servers healthy\n";
-			ctx.ui.notify(output, issues.length > 0 ? "warning" : "info");
-		},
-	});
+			if (!mcpLifecycleManager) {
+				ctx.ui.notify("MCP Lifecycle Manager not initialized", "error");
+				return;
+			}
+			if (!projectState.initialized) initializeBundledState();
 
-	pi.registerCommand("gentle-extensions:conflicts", {
+			let output = "MCP Health Check:\n\n";
+			let hasErrors = false;
+			for (const [name, server] of projectState.mcpServers) {
+				if (server.enabled === false) continue;
+				const result = await mcpLifecycleManager.healthCheck(server);
+				const status = result.ok ? "✅" : "❌";
+				output += `  ${status} ${name} (${server.transport}): ${result.ok ? "healthy" : result.error || "failed"}\n`;
+				if (!result.ok) hasErrors = true;
+			}
+			if (!hasErrors) output += "✅ All MCP servers healthy\n";
+			ctx.ui.notify(output, hasErrors ? "error" : "info");
+		},
+	});pi.registerCommand("gentle-extensions:conflicts", {
 		description: "Show conflicts between bundled and local resources",
 		handler: async (_args, ctx) => {
 			const result = await copyBundledAgentsToProject(ctx.cwd);
@@ -1164,47 +1449,78 @@ GraphViz DOT:
 				ctx.ui.notify("Usage: /gentle-extensions:mcp-install <server-name>", "error");
 				return;
 			}
-			const success = await installMcpServer(ctx, name);
-			if (success) {
-				// Re-register after install
-				await registerBundledMcpServers(ctx);
+			if (!mcpLifecycleManager) {
+				ctx.ui.notify("MCP Lifecycle Manager not initialized", "error");
+				return;
+			}
+			const server = projectState.mcpServers.get(name);
+			if (!server) {
+				ctx.ui.notify(`MCP server ${name} not found`, "error");
+				return;
+			}
+			try {
+				const success = await mcpLifecycleManager.install(server, ctx.cwd);
+				if (success) {
+					ctx.ui.notify(`MCP server ${name} installed successfully`, "info");
+					await registerBundledMcpServers(ctx);
+				} else {
+					ctx.ui.notify(`Failed to install MCP server ${name}`, "error");
+				}
+			} catch (e) {
+				ctx.ui.notify(`Install error: ${e}`, "error");
 			}
 		},
 	});
 
-	pi.registerCommand("gentle-extensions:mcp-status", {
+		pi.registerCommand("gentle-extensions:mcp-status", {
 		description: "Show MCP servers status (available, disabled, failed, not_installed)",
 		handler: async (_args, ctx) => {
-			if (!projectState.initialized) initializeBundledState();
-
-			let output = "MCP Servers Status:\n\n";
-			for (const [name, server] of projectState.mcpServers) {
-				if (server.enabled === false) {
-					output += `  ${name}: disabled\n`;
-					continue;
-				}
-
-				let status = "available";
-				if (server.install) {
-					// Check if installed
-					const { spawnSync } = await import("node:child_process");
-					let checkResult: { status: number } = { status: 1 };
-					if (server.install.manager === "npm") {
-						checkResult = spawnSync("npm", ["list", "-g", `${server.install.package}@${server.install.version}`], { stdio: "ignore" });
-					} else if (server.install.manager === "uv") {
-						checkResult = spawnSync("uv", ["tool", "list"], { stdio: "ignore" });
-					} else if (server.install.manager === "pip") {
-						checkResult = spawnSync("pip", ["show", server.install.package], { stdio: "ignore" });
-					} else if (server.install.manager === "cargo") {
-						checkResult = spawnSync("cargo", ["install", "--list"], { stdio: "ignore" });
-					}
-					if (checkResult.status !== 0) {
-						status = "not_installed";
-					}
-				}
-				output += `  ${name}: ${status} (${server.transport})\n`;
+			if (!mcpLifecycleManager) {
+				ctx.ui.notify("MCP Lifecycle Manager not initialized", "error");
+				return;
 			}
-			ctx.ui.notify(output, "info");
+			const report = await mcpLifecycleManager.getStatusReport();
+			ctx.ui.notify(report, "info");
+		},
+	pi.registerCommand("gentle-extensions:mcp-uninstall", {
+		description: "Uninstall an MCP server explicitly",
+		handler: async (args, ctx) => {
+			const name = args?.name as string | undefined;
+			if (!name) {
+				ctx.ui.notify("Usage: /gentle-extensions:mcp-uninstall <server-name>", "error");
+				return;
+			}
+			if (!mcpLifecycleManager) {
+				ctx.ui.notify("MCP Lifecycle Manager not initialized", "error");
+				return;
+			}
+			try {
+				const success = await mcpLifecycleManager.uninstall(name);
+				if (success) {
+					ctx.ui.notify("MCP server " + name + " uninstalled successfully", "info");
+					await registerBundledMcpServers(ctx);
+				} else {
+					ctx.ui.notify("Failed to uninstall MCP server " + name, "error");
+				}
+			} catch (e) {
+				ctx.ui.notify("Uninstall error: " + e, "error");
+			}
 		},
 	});
-}
+
+	pi.registerCommand("gentle-extensions:mcp-logs", {
+		description: "Show MCP server logs (stdio stderr/stdout)",
+		handler: async (args, ctx) => {
+			if (!mcpLifecycleManager) {
+				ctx.ui.notify("MCP Lifecycle Manager not initialized", "error");
+				return;
+			}
+			const name = args?.name as string | undefined;
+			if (!name) {
+				ctx.ui.notify("Usage: /gentle-extensions:mcp-logs <server-name>", "error");
+				return;
+			}
+			ctx.ui.notify("MCP logs retrieval not yet implemented for this server", "warning");
+		},
+	});
+});
