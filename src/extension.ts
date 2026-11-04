@@ -1405,22 +1405,43 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 	});
 
 	pi.registerCommand("gentle-extensions:status", {
-		description: "Show bundled resources status",
+		description: "Show bundled resources status with real-time state",
 		handler: async (_args, ctx) => {
 			if (!projectState.initialized) initializeBundledState();
 
 			const agents = Array.from(projectState.agents);
 			const overlayTargets = Array.from(projectState.overlays.keys());
-			const mcpServers = Array.from(projectState.mcpServers.keys());
-			const routingAgents = Array.from(projectState.routing.keys());
+			const mcpServers = Array.from(projectState.mcpServers.entries());
+			const routingAgents = Array.from(projectState.routing.entries());
+			const skillsDir = join(PACKAGE_ROOT, "resources", "skills");
+			const skillDirs = existsSync(skillsDir) 
+				? readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
+				: [];
+
+			// MCP real-time status
+			const mcpStatus = mcpServers.map(([name, server]) => {
+				const state = mcpLifecycleManager?.getState(name);
+				const lifecycleState = state?.lifecycleState || server.lifecycleState || "unknown";
+				const version = state?.installedVersion || server.installedVersion || "unknown";
+				const health = state?.lastHealthCheck ? ` (checked ${Math.round((Date.now() - state.lastHealthCheck)/1000)}s ago)` : "";
+				const error = state?.lastError ? ` - ${state.lastError}` : "";
+				return `  ${name}: ${lifecycleState} v${version}${health}${error}`;
+			}).join("\n");
+
+			// Routing with details
+			const routingDetails = routingAgents.map(([name, route]) => {
+				return `  ${name}: agent=${route.agent}, triggers=${route.triggers.join(",")}, priority=${route.priority??100}, skills=${(route.requiredSkills||[]).join(",")}, mcp=${(route.requiredMcp||[]).join(",")}`;
+			}).join("\n");
 
 			let msg = `gentle-agent-extensions status:\n`;
 			msg += `  Package root: ${PACKAGE_ROOT}\n`;
+			msg += `  Extension initialized: ${projectState.initialized ? "yes" : "no"}\n`;
 			msg += `  Bundled agents: ${agents.length > 0 ? agents.join(", ") : "none"}\n`;
 			msg += `  Bundled overlays: ${overlayTargets.length > 0 ? overlayTargets.join(", ") : "none"}\n`;
-			msg += `  Bundled MCP servers: ${mcpServers.length > 0 ? mcpServers.join(", ") : "none"}\n`;
-			msg += `  Bundled routing: ${routingAgents.length > 0 ? routingAgents.join(", ") : "none"}\n`;
-			msg += `  Bundled skills: ${existsSync(join(PACKAGE_ROOT, "resources", "skills")) ? "present" : "missing"}\n`;
+			msg += `  Bundled skills: ${skillDirs.length > 0 ? skillDirs.join(", ") : "none"}\n`;
+			msg += `\nMCP Servers (real-time):\n${mcpStatus.length > 0 ? mcpStatus : "  none"}\n`;
+			msg += `\nRouting rules (with conditions/skills/MCP):\n${routingDetails.length > 0 ? routingDetails : "  none"}\n`;
+			msg += `\nBundled routing agents: ${routingAgents.length > 0 ? routingAgents.map(([n]) => n).join(", ") : "none"}\n`;
 
 			ctx.ui.notify(msg, "info");
 		},
@@ -1521,6 +1542,231 @@ export default function gentleAgentExtensions(pi: ExtensionAPI): void {
 				return;
 			}
 			ctx.ui.notify("MCP logs retrieval not yet implemented for this server", "warning");
+		},
+	});
+
+
+	pi.registerCommand("gentle-extensions:resources", {
+		description: "Show bundled vs local vs outdated vs conflicted resources",
+		handler: async (_args, ctx) => {
+			if (!projectState.initialized) initializeBundledState();
+
+			const result = await copyBundledAgentsToProject(ctx.cwd);
+			const skillsDir = join(PACKAGE_ROOT, "resources", "skills");
+			const skillDirs = existsSync(skillsDir) 
+				? readdirSync(skillsDir, { withFileTypes: true }).filter(d => d.isDirectory()).map(d => d.name)
+				: [];
+
+			let output = "Resources Status:\n\n";
+			output += "Agents:\n";
+			if (result.synced.length > 0) output += "  Synced: " + result.synced.join(", ") + "\n";
+			if (result.skipped.length > 0) output += "  Skipped (identical): " + result.skipped.join(", ") + "\n";
+			if (result.conflicts.length > 0) output += "  Conflicts (user-modified): " + result.conflicts.join(", ") + "\n";
+			if (result.synced.length === 0 && result.skipped.length === 0 && result.conflicts.length === 0) {
+				output += "  No agents found\n";
+			}
+
+			output += "\nSkills:\n";
+			if (existsSync(join(PACKAGE_ROOT, "resources", "skills"))) {
+				const skillDirs = readdirSync(join(PACKAGE_ROOT, "resources", "skills"), { withFileTypes: true })
+					.filter(d => d.isDirectory()).map(d => d.name);
+				output += "  Bundled: " + skillDirs.join(", ") + "\n";
+			} else {
+				output += "  No skills directory\n";
+			}
+
+			output += "\nOverlays:\n";
+			const overlayTargets = Array.from(projectState.overlays.keys());
+			output += "  Bundled: " + (overlayTargets.length > 0 ? overlayTargets.join(", ") : "none") + "\n";
+
+			output += "\nMCP Servers:\n";
+			const mcpServers = Array.from(projectState.mcpServers.entries());
+			if (mcpServers.length > 0) {
+				for (const [name, server] of mcpServers) {
+					const state = mcpLifecycleManager?.getState(name);
+					const lifecycleState = state?.lifecycleState || server.lifecycleState || "unknown";
+					const version = state?.installedVersion || server.installedVersion || "unknown";
+					output += "  " + name + ": " + lifecycleState + " v" + version + " (" + server.transport + ")\n";
+				}
+			} else {
+				output += "  none\n";
+			}
+
+			output += "\nRouting:\n";
+			const routingAgents = Array.from(projectState.routing.entries());
+			if (routingAgents.length > 0) {
+				for (const [name, route] of routingAgents) {
+					output += "  " + name + ": agent=" + route.agent + ", triggers=" + route.triggers.join(",") + ", priority=" + (route.priority ?? 100) + "\n";
+				}
+			} else {
+				output += "  none\n";
+			}
+
+			ctx.ui.notify(output, "info");
+		},
+	});
+
+	pi.registerCommand("gentle-extensions:routing", {
+		description: "Show routing rules loaded and their agents/skills/MCP requirements",
+		handler: async (_args, ctx) => {
+			if (!projectState.initialized) initializeBundledState();
+
+			const routingAgents = Array.from(projectState.routing.entries());
+			if (routingAgents.length === 0) {
+				ctx.ui.notify("No routing rules loaded", "info");
+				return;
+			}
+
+			let output = "Routing Rules:\n\n";
+			for (const [name, route] of routingAgents) {
+				output += "## " + name + "\n";
+				output += "  Agent: " + route.agent + "\n";
+				output += "  Triggers: " + route.triggers.join(", ") + "\n";
+				if (route.conditions && route.conditions.length > 0) {
+					output += "  Conditions: " + route.conditions.join(", ") + "\n";
+				}
+				if (route.requiredSkills && route.requiredSkills.length > 0) {
+					output += "  Required Skills: " + route.requiredSkills.join(", ") + "\n";
+				}
+				if (route.requiredMcp && route.requiredMcp.length > 0) {
+					output += "  Required MCP: " + route.requiredMcp.join(", ") + "\n";
+				}
+				output += "  Delegation: " + route.delegation + "\n";
+				output += "  Priority: " + (route.priority ?? 100) + "\n\n";
+			}
+
+			ctx.ui.notify(output, "info");
+		},
+	});
+
+	pi.registerCommand("gentle-extensions:conflicts", {
+		description: "Show 3-way diff: bundled vs local vs user-modified resources",
+		handler: async (_args, ctx) => {
+			const result = await copyBundledAgentsToProject(ctx.cwd);
+			let output = "Resource Conflicts (3-way diff):\n\n";
+
+			if (result.conflicts.length > 0) {
+				output += "Conflicts (user-modified, differs from bundled):\n";
+				for (const name of result.conflicts) {
+					const sourcePath = join(BUNDLED.agents, name + ".md");
+					const targetPath = join(getProjectAgentDir(ctx.cwd, getAgentHome()), name + ".md");
+					const sourceContent = readFileSync(sourcePath, "utf8");
+					const targetContent = readFileSync(targetPath, "utf8");
+					const sourceHash = hashContent(sourceContent).slice(0, 8);
+					const targetHash = hashContent(targetContent).slice(0, 8);
+					output += "  " + name + ": bundled=" + sourceHash + " vs local=" + targetHash + " (DIFFER)\n";
+				}
+			} else {
+				output += "No conflicts detected\n";
+			}
+
+			ctx.ui.notify(output, result.conflicts.length > 0 ? "warning" : "info");
+		},
+	});
+
+	pi.registerCommand("gentle-extensions:mcp-health", {
+		description: "Check MCP server connectivity with real MCP handshake",
+		handler: async (_args, ctx) => {
+			if (!mcpLifecycleManager) {
+				ctx.ui.notify("MCP Lifecycle Manager not initialized", "error");
+				return;
+			}
+			if (!projectState.initialized) initializeBundledState();
+
+			let output = "MCP Health Check (real handshake):\n\n";
+			let hasErrors = false;
+			for (const [name, server] of projectState.mcpServers) {
+				if (server.enabled === false) continue;
+				const result = await mcpLifecycleManager.healthCheck(server);
+				const status = result.ok ? "OK" : "FAIL";
+				const latency = result.latencyMs ? " (" + result.latencyMs + "ms)" : "";
+				output += "  " + status + " " + name + " (" + server.transport + ")": " + (result.ok ? "healthy" : result.error || "failed") + latency + "\n";
+				if (!result.ok) hasErrors = true;
+			}
+			if (!hasErrors && projectState.mcpServers.size > 0) output += "\nAll MCP servers healthy\n";
+			if (projectState.mcpServers.size === 0) output += "No MCP servers configured\n";
+			ctx.ui.notify(output, hasErrors ? "error" : "info");
+		},
+	});
+
+	pi.registerCommand("gentle-extensions:doctor", {
+		description: "Deep diagnostic: graph integrity, resource conflicts, MCP lifecycle, routing",
+		handler: async (args, ctx) => {
+			const includeMcpHealth = args?.mcpHealth === true;
+			const includeGraph = args?.graph === true;
+			const includeResources = args?.resources === true;
+			const includeRouting = args?.routing === true;
+
+			if (includeGraph) {
+				const graph = buildResourceGraph(ctx.cwd);
+				const summary = generateGraphSummary(graph);
+				const dot = generateGraphVizDot(graph);
+				let output = "Resource Graph:\n\n" + summary;
+				if (args?.dot) {
+					output += "\n\nGraphViz DOT:\n" + dot;
+				}
+				ctx.ui.notify(output, graph.errors.length > 0 ? "error" : "info");
+				return;
+			}
+
+			let output = "gentle-agent-extensions deep doctor:\n\n";
+			let hasIssues = false;
+
+			const { issues, warnings } = await runDoctorChecks(ctx.cwd, ctx.env, true);
+			if (issues.length > 0) {
+				output += "Issues:\n";
+				for (const i of issues) output += "  - " + i + "\n";
+				hasIssues = true;
+			}
+			if (warnings.length > 0) {
+				output += "Warnings:\n";
+				for (const w of warnings) output += "  - " + w + "\n";
+			}
+
+			const result = await copyBundledAgentsToProject(ctx.cwd);
+			if (result.conflicts.length > 0) {
+				output += "\nResource Conflicts:\n";
+				for (const name of result.conflicts) {
+					output += "  - " + name + " (user-modified)\n";
+				}
+				hasIssues = true;
+			} else if (result.synced.length > 0 || result.skipped.length > 0) {
+				output += "\nResources: " + result.synced.length + " synced, " + result.skipped.length + " identical\n";
+			}
+
+			if (!projectState.initialized) initializeBundledState();
+			const routingIssues = [];
+			for (const [name, route] of projectState.routing) {
+				if (!projectState.agents.has(route.agent)) {
+					routingIssues.push("Route " + name + " -> unknown agent " + route.agent);
+				}
+				for (const skill of route.requiredSkills || []) {
+					if (!existsSync(join(PACKAGE_ROOT, "resources", "skills", skill))) {
+						routingIssues.push("Route " + name + " -> missing skill " + skill);
+					}
+				}
+				for (const mcp of route.requiredMcp || []) {
+					if (!projectState.mcpServers.has(mcp)) {
+						routingIssues.push("Route " + name + " -> missing MCP " + mcp);
+					}
+				}
+			}
+			if (routingIssues.length > 0) {
+				output += "\nRouting Issues:\n";
+				for (const issue of routingIssues) output += "  - " + issue + "\n";
+				hasIssues = true;
+			} else {
+				output += "\nRouting: all references valid\n";
+			}
+
+			if (mcpLifecycleManager) {
+			 const report = await mcpLifecycleManager.getStatusReport();
+			 output += "\n" + report;
+			}
+
+			if (!hasIssues) output += "All deep checks passed\n";
+
+			ctx.ui.notify(output, hasIssues ? "error" : "info");
 		},
 	});
 });
