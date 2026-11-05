@@ -10,6 +10,7 @@
     "mcp",
     "architecture"
   ],
+  "type": "module",
   "license": "Apache-2.0",
   "author": "AndyTechnologies",
   "repository": {
@@ -37,10 +38,13 @@
     "validate:skills": "npx tsx scripts/validate-skills.ts"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "^1.5.0",
     "@earendil-works/pi-agent-core": "^1.5.0",
     "@earendil-works/pi-ai": "^1.5.0",
+    "@earendil-works/pi-coding-agent": "^1.5.0",
     "@earendil-works/pi-tui": "^1.5.0",
     "typebox": "^1.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^7.0.2"
   }
 }

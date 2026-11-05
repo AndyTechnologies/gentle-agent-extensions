@@ -7,6 +7,7 @@ import test, { describe } from "node:test";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROJECT_ROOT = resolve(__dirname, "..");
 const EXTENSION_PATH = join(PROJECT_ROOT, "src/extension.ts");
+const SRC_PATH = join(PROJECT_ROOT, "src");
 
 describe("gentle-agent-extensions package structure", () => {
 	test("package directories exist", () => {
@@ -19,20 +20,64 @@ describe("gentle-agent-extensions package structure", () => {
 		assert.ok(existsSync(join(PROJECT_ROOT, "scripts")), "scripts/ exists for validate-skills.ts");
 	});
 
-	test("extension entry point exists", () => {
+	test("extension entry point exists and is a composition root", () => {
 		assert.ok(existsSync(EXTENSION_PATH), "src/extension.ts exists");
 		const content = readFileSync(EXTENSION_PATH, "utf8");
 		assert.ok(content.includes("gentleAgentExtensions"), "exports main function");
-		assert.ok(content.includes("before_agent_start"), "handles before_agent_start");
-		assert.ok(content.includes("session_start"), "handles session_start");
-		assert.ok(content.includes("PACKAGE_ROOT"), "uses PACKAGE_ROOT for bundled resources");
-		assert.ok(content.includes("BUNDLED"), "has BUNDLED resource paths");
-		assert.ok(content.includes("gentle-extensions:sync"), "registers sync command");
-		assert.ok(content.includes("gentle-extensions:doctor"), "registers doctor command");
-		assert.ok(content.includes("gentle-extensions:status"), "registers status command");
-		assert.ok(content.includes("gentle-extensions:mcp-reload"), "registers mcp-reload command");
-		assert.ok(content.includes("gentle-extensions:fix"), "registers fix command");
-		assert.ok(content.includes("gentle-extensions:mcp-health"), "registers mcp-health command");
+		assert.ok(content.includes("createRuntime"), "uses createRuntime from core");
+		assert.ok(content.includes("registerEvents"), "uses registerEvents from events");
+		assert.ok(content.includes("registerCommands"), "uses registerCommands from commands");
+	});
+
+	test("modular architecture - core module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "core", "constants.ts")), "core/constants.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "core", "paths.ts")), "core/paths.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "core", "logger.ts")), "core/logger.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "core", "runtime.ts")), "core/runtime.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "core", "utils.ts")), "core/utils.ts exists");
+	});
+
+	test("modular architecture - agents module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "agents", "types.ts")), "agents/types.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "agents", "loader.ts")), "agents/loader.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "agents", "sync.ts")), "agents/sync.ts exists");
+	});
+
+	test("modular architecture - overlays module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "overlays", "types.ts")), "overlays/types.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "overlays", "loader.ts")), "overlays/loader.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "overlays", "applier.ts")), "overlays/applier.ts exists");
+	});
+
+	test("modular architecture - routing module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "routing", "types.ts")), "routing/types.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "routing", "loader.ts")), "routing/loader.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "routing", "evaluator.ts")), "routing/evaluator.ts exists");
+	});
+
+	test("modular architecture - mcp module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "mcp", "types.ts")), "mcp/types.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "mcp", "config-loader.ts")), "mcp/config-loader.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "mcp", "registry.ts")), "mcp/registry.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "mcp", "handshake.ts")), "mcp/handshake.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "mcp", "lifecycle-manager.ts")), "mcp/lifecycle-manager.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "mcp", "service.ts")), "mcp/service.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "mcp", "utils.ts")), "mcp/utils.ts exists");
+	});
+
+	test("modular architecture - diagnostics module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "diagnostics", "types.ts")), "diagnostics/types.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "diagnostics", "doctor.ts")), "diagnostics/doctor.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "diagnostics", "resource-graph.ts")), "diagnostics/resource-graph.ts exists");
+		assert.ok(existsSync(join(SRC_PATH, "diagnostics", "formatters.ts")), "diagnostics/formatters.ts exists");
+	});
+
+	test("modular architecture - events module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "events", "register.ts")), "events/register.ts exists");
+	});
+
+	test("modular architecture - commands module exists", () => {
+		assert.ok(existsSync(join(SRC_PATH, "commands", "register.ts")), "commands/register.ts exists");
 	});
 
 	test("package.json has correct pi manifest", () => {
@@ -412,13 +457,15 @@ describe("extension load test", () => {
 		
 		// Check required imports
 		assert.ok(content.includes("@earendil-works/pi-coding-agent"), "imports ExtensionAPI");
-		assert.ok(content.includes("ExtensionContext"), "imports ExtensionContext");
+		assert.ok(content.includes("createRuntime"), "imports createRuntime");
+		assert.ok(content.includes("registerEvents"), "imports registerEvents");
+		assert.ok(content.includes("registerCommands"), "imports registerCommands");
 		
-		// Check required event handlers
-		assert.ok(content.includes('pi.on("session_start"'), "registers session_start");
-		assert.ok(content.includes('pi.on("before_agent_start"'), "registers before_agent_start");
+		// Check required event handlers registration
+		assert.ok(content.includes("registerEvents"), "registers events");
+		assert.ok(content.includes("registerCommands"), "registers commands");
 		
-		// Check command registrations
+		// Check command registrations via commands module
 		const commands = [
 			"gentle-extensions:sync",
 			"gentle-extensions:doctor",
@@ -428,17 +475,32 @@ describe("extension load test", () => {
 			"gentle-extensions:mcp-health",
 			"gentle-extensions:conflicts"
 		];
+		// These are registered in commands/register.ts
+		const commandsContent = readFileSync(join(SRC_PATH, "commands", "register.ts"), "utf8");
 		for (const cmd of commands) {
-			assert.ok(content.includes(cmd), `registers ${cmd}`);
+			assert.ok(commandsContent.includes(cmd), `registers ${cmd}`);
 		}
 		
-		// Check resource loading functions
-		assert.ok(content.includes("discoverBundledAgents"), "has discoverBundledAgents");
-		assert.ok(content.includes("loadBundledOverlays"), "has loadBundledOverlays");
-		assert.ok(content.includes("loadBundledMcpServers"), "has loadBundledMcpServers");
-		assert.ok(content.includes("loadBundledRouting"), "has loadBundledRouting");
-		assert.ok(content.includes("copyBundledAgentsToProject"), "has copyBundledAgentsToProject");
-		assert.ok(content.includes("registerBundledMcpServers"), "has registerBundledMcpServers");
-		assert.ok(content.includes("applyOverlay"), "has applyOverlay with mode support");
+		// Check resource loading functions are in their modules
+		const agentsLoader = readFileSync(join(SRC_PATH, "agents", "loader.ts"), "utf8");
+		assert.ok(agentsLoader.includes("discoverBundledAgents"), "has discoverBundledAgents in agents/loader");
+		
+		const overlaysLoader = readFileSync(join(SRC_PATH, "overlays", "loader.ts"), "utf8");
+		assert.ok(overlaysLoader.includes("loadBundledOverlays"), "has loadBundledOverlays in overlays/loader");
+		
+		const mcpConfigLoader = readFileSync(join(SRC_PATH, "mcp", "config-loader.ts"), "utf8");
+		assert.ok(mcpConfigLoader.includes("loadBundledMcpServers"), "has loadBundledMcpServers in mcp/config-loader");
+		
+		const routingLoader = readFileSync(join(SRC_PATH, "routing", "loader.ts"), "utf8");
+		assert.ok(routingLoader.includes("loadBundledRouting"), "has loadBundledRouting in routing/loader");
+		
+		const agentsSync = readFileSync(join(SRC_PATH, "agents", "sync.ts"), "utf8");
+		assert.ok(agentsSync.includes("syncBundledAgentsToProject"), "has syncBundledAgentsToProject in agents/sync");
+		
+		const mcpRegistry = readFileSync(join(SRC_PATH, "mcp", "registry.ts"), "utf8");
+		assert.ok(mcpRegistry.includes("registerBundledMcpServers"), "has registerBundledMcpServers in mcp/registry");
+		
+		const overlaysApplier = readFileSync(join(SRC_PATH, "overlays", "applier.ts"), "utf8");
+		assert.ok(overlaysApplier.includes("applyOverlay"), "has applyOverlay with mode support in overlays/applier");
 	});
 });
